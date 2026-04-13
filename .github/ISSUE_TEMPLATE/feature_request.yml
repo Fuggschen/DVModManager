@@ -1,0 +1,57 @@
+name: Feature Request
+description: Suggest an improvement for DV Mod Manager
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please describe the problem and the expected outcome.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to Solve
+      description: What pain point are you experiencing?
+      placeholder: Describe the current limitation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: What should DV Mod Manager do?
+      placeholder: Describe your ideal behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any other approaches you considered.
+
+  - type: textarea
+    id: user-impact
+    attributes:
+      label: User Impact
+      description: Who benefits and how?
+      placeholder: Example: Helps users manage large mod sets faster.
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Suggested Acceptance Criteria
+      description: Optional checklist for done criteria.
+      placeholder: |
+        - [ ] Behavior A is supported
+        - [ ] UI shows B
+        - [ ] Existing workflow C still works
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Mockups, references, or related issues.
