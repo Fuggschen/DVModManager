@@ -1,0 +1,188 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:DVModManager.ViewModels"
+        x:Class="DVModManager.Views.SettingsDialog"
+        x:DataType="vm:SettingsViewModel"
+        Title="Settings"
+        Width="600" Height="500"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="#1e1e2e">
+
+    <Grid RowDefinitions="*,Auto" Margin="20">
+
+        <!-- Settings content -->
+        <ScrollViewer Grid.Row="0"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="20">
+
+                <!-- ── Game Path ──────────────────────────────────── -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Derail Valley Installation"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="#cdd6f4" />
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding GamePath, Mode=TwoWay}"
+                                 PlaceholderText="Path to Derail Valley folder..."
+                                 Background="#313244"
+                                 BorderBrush="#45475a"
+                                 Foreground="#cdd6f4"
+                                 Margin="0,0,6,0" />
+                        <Button Grid.Column="1"
+                                Content="Browse"
+                                Command="{Binding BrowseGamePathCommand}"
+                                Background="#45475a"
+                                Foreground="#cdd6f4"
+                                Padding="10,6"
+                                Margin="0,0,4,0" />
+                        <Button Grid.Column="2"
+                                Content="Auto"
+                                Command="{Binding DetectGamePathCommand}"
+                                ToolTip.Tip="Auto-detect via Steam"
+                                Background="#89b4fa"
+                                Foreground="#1e1e2e"
+                                Padding="10,6" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- ── Storage Path ───────────────────────────────── -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Storage Folder"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="#cdd6f4" />
+                    <TextBlock Text="Where version archives, profiles and logs are kept."
+                               Foreground="#6c7086"
+                               FontSize="11" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding StoragePath, Mode=TwoWay}"
+                                 Background="#313244"
+                                 BorderBrush="#45475a"
+                                 Foreground="#cdd6f4"
+                                 Margin="0,0,6,0" />
+                        <Button Grid.Column="1"
+                                Content="Browse"
+                                Command="{Binding BrowseStoragePathCommand}"
+                                Background="#45475a"
+                                Foreground="#cdd6f4"
+                                Padding="10,6" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- ── Nexus API Key ──────────────────────────────── -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Nexus Mods API Key"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="#cdd6f4" />
+                    <TextBlock Text="Required for Nexus Mods update checks. Leave blank to skip."
+                               Foreground="#6c7086"
+                               FontSize="11" />
+                    <TextBox Text="{Binding NexusApiKey, Mode=TwoWay}"
+                             PlaceholderText="Your Nexus Mods API key..."
+                             PasswordChar="•"
+                             Background="#313244"
+                             BorderBrush="#45475a"
+                             Foreground="#cdd6f4" />
+                </StackPanel>
+
+                <!-- ── GitHub Token ───────────────────────────────── -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="GitHub Token (optional)"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="#cdd6f4" />
+                    <TextBlock Text="Increases the GitHub API rate limit from 60 to 5000 requests/hour."
+                               Foreground="#6c7086"
+                               FontSize="11" />
+                    <TextBox Text="{Binding GitHubToken, Mode=TwoWay}"
+                             PlaceholderText="ghp_..."
+                             PasswordChar="•"
+                             Background="#313244"
+                             BorderBrush="#45475a"
+                             Foreground="#cdd6f4" />
+                </StackPanel>
+
+                <!-- ── Misc settings ──────────────────────────────── -->
+                <StackPanel Spacing="10">
+                    <TextBlock Text="General"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="#cdd6f4" />
+
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" VerticalAlignment="Center">
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Text="Check for updates on startup"
+                                   Foreground="#cdd6f4"
+                                   FontSize="13"
+                                   VerticalAlignment="Center" />
+                        <CheckBox Grid.Row="0" Grid.Column="1"
+                                  IsChecked="{Binding AutoCheckUpdates, Mode=TwoWay}"
+                                  HorizontalAlignment="Right" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                   Text="Backup mods before bulk changes"
+                                   Foreground="#cdd6f4"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"
+                                   Margin="0,8,0,0" />
+                        <StackPanel Grid.Row="1" Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    Spacing="6"
+                                    Margin="0,8,0,0">
+                            <Button Content="Open Folder"
+                                    Command="{Binding OpenBackupFolderCommand}"
+                                    Background="#313244"
+                                    Foreground="#cdd6f4"
+                                    Padding="8,3"
+                                    FontSize="12" />
+                            <CheckBox IsChecked="{Binding BackupBeforeChanges, Mode=TwoWay}"
+                                      HorizontalAlignment="Right" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0"
+                                   Text="Max version cache size (GB)"
+                                   Foreground="#cdd6f4"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"
+                                   Margin="0,8,0,0" />
+                        <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                       Value="{Binding MaxCacheGb, Mode=TwoWay}"
+                                       Minimum="1" Maximum="100"
+                                       Increment="1"
+                                       Width="100"
+                                       Background="#313244"
+                                       BorderBrush="#45475a"
+                                       Foreground="#cdd6f4"
+                                       HorizontalAlignment="Right"
+                                       Margin="0,8,0,0" />
+                    </Grid>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer buttons -->
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,16,0,0">
+            <Button Content="Cancel"
+                    Command="{Binding CancelCommand}"
+                    CommandParameter="{Binding $parent[Window]}"
+                    Background="#313244"
+                    Foreground="#cdd6f4"
+                    Padding="20,8" />
+            <Button Content="Save"
+                    Command="{Binding SaveCommand}"
+                    CommandParameter="{Binding $parent[Window]}"
+                    Background="#a6e3a1"
+                    Foreground="#1e1e2e"
+                    Padding="20,8" />
+        </StackPanel>
+    </Grid>
+</Window>

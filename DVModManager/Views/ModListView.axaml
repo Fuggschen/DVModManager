@@ -1,0 +1,94 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:DVModManager.Views"
+             xmlns:vm="using:DVModManager.ViewModels"
+             x:Class="DVModManager.Views.ModListView"
+             x:Name="Root">
+
+    <Border Background="#181825"
+            BorderBrush="#313244"
+            BorderThickness="1"
+            Margin="4">
+        <Grid RowDefinitions="Auto,Auto,*">
+
+            <!-- Header -->
+            <Border Grid.Row="0"
+                    Background="#1e1e2e"
+                    Padding="12,8">
+                <TextBlock Text="{Binding #Root.Header}"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="#cdd6f4" />
+            </Border>
+
+            <!-- Search box -->
+            <TextBox Grid.Row="1"
+                     Text="{Binding #Root.Filter, Mode=TwoWay}"
+                     PlaceholderText="Search..."
+                     Background="#1e1e2e"
+                     BorderBrush="#45475a"
+                     BorderThickness="0,1,0,1"
+                     Foreground="#cdd6f4"
+                     Padding="10,6"
+                     Margin="0" />
+
+            <!-- Mod list -->
+            <ListBox Grid.Row="2"
+                     ItemsSource="{Binding #Root.Mods}"
+                     SelectedItem="{Binding #Root.SelectedMod, Mode=TwoWay}"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Padding="4">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ModItemViewModel">
+                        <Border Padding="8,6"
+                                CornerRadius="4"
+                                Margin="0,2">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+
+                                <!-- Status dot -->
+                                <Ellipse Grid.Column="0"
+                                         Width="8" Height="8"
+                                         Fill="{Binding StatusBrush}"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,8,0" />
+
+                                <!-- Mod info -->
+                                <StackPanel Grid.Column="1" Spacing="1">
+                                    <TextBlock Text="{Binding DisplayName}"
+                                               FontWeight="Medium"
+                                               Foreground="#cdd6f4"
+                                               FontSize="13" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding Author}"
+                                                   Foreground="#6c7086"
+                                                   FontSize="11" />
+                                        <TextBlock Text="•"
+                                                   Foreground="#45475a"
+                                                   FontSize="11" />
+                                        <TextBlock Text="{Binding Version}"
+                                                   Foreground="#45475a"
+                                                   FontSize="11" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Update badge -->
+                                <Border Grid.Column="2"
+                                        Background="#f39c12"
+                                        CornerRadius="3"
+                                        Padding="4,1"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{Binding HasUpdate}">
+                                    <TextBlock Text="UPDATE"
+                                               FontSize="9"
+                                               FontWeight="Bold"
+                                               Foreground="#1e1e2e" />
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+    </Border>
+</UserControl>

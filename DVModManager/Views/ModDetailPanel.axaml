@@ -1,0 +1,198 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DVModManager.ViewModels"
+             xmlns:models="using:DVModManager.Models"
+             xmlns:conv="using:DVModManager.Converters"
+             x:Class="DVModManager.Views.ModDetailPanel"
+             x:DataType="vm:MainWindowViewModel"
+             Background="#181825">
+
+    <UserControl.Resources>
+        <conv:NullToBoolConverter x:Key="NullToBool" />
+        <conv:InverseBoolConverter x:Key="InvBool" />
+    </UserControl.Resources>
+
+    <!-- No selection placeholder -->
+    <Panel>
+        <TextBlock Text="Select a mod to see details"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="#45475a"
+                   FontSize="13"
+                   IsVisible="{Binding SelectedMod, Converter={StaticResource NullToBool},
+                               ConverterParameter=invert}" />
+
+        <!-- Detail content -->
+        <ScrollViewer IsVisible="{Binding SelectedMod, Converter={StaticResource NullToBool}}"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="0">
+
+                <!-- ── Mod header ──────────────────────────────────── -->
+                <Border Background="#1e1e2e"
+                        Padding="16,12"
+                        BorderBrush="#313244"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding SelectedMod.DisplayName}"
+                                   FontSize="16"
+                                   FontWeight="Bold"
+                                   Foreground="#cdd6f4"
+                                   TextWrapping="Wrap" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding SelectedMod.Author}"
+                                       Foreground="#6c7086"
+                                       FontSize="12" />
+                            <TextBlock Text="•" Foreground="#45475a" FontSize="12" />
+                            <TextBlock Text="{Binding SelectedMod.Version}"
+                                       Foreground="#89dceb"
+                                       FontSize="12" />
+                        </StackPanel>
+
+                        <!-- Status row -->
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                            <Ellipse Width="8" Height="8"
+                                     Fill="{Binding SelectedMod.StatusBrush}"
+                                     VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SelectedMod.StatusLabel}"
+                                       Foreground="{Binding SelectedMod.StatusBrush}"
+                                       FontSize="12" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Description ────────────────────────────────── -->
+                <Border Padding="16,10"
+                        BorderBrush="#313244"
+                        BorderThickness="0,0,0,1"
+                        IsVisible="{Binding SelectedMod.Description, Converter={StaticResource NullToBool}}">
+                    <TextBlock Text="{Binding SelectedMod.Description}"
+                               Foreground="#a6adc8"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+                </Border>
+
+                <!-- ── Links ──────────────────────────────────────── -->
+                <Border Padding="16,8"
+                        BorderBrush="#313244"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Spacing="4">
+                        <Button Content="🌐 HomePage"
+                                Classes="link"
+                                HorizontalAlignment="Left"
+                                IsVisible="{Binding SelectedMod.HomePage, Converter={StaticResource NullToBool}}"
+                                Tag="{Binding SelectedMod.HomePage}"
+                                Click="OnLinkClick"
+                                Background="Transparent"
+                                Foreground="#89b4fa"
+                                Padding="0"
+                                BorderThickness="0" />
+
+                        <Button Content="📦 Repository"
+                                Classes="link"
+                                HorizontalAlignment="Left"
+                                IsVisible="{Binding SelectedMod.Repository, Converter={StaticResource NullToBool}}"
+                                Tag="{Binding SelectedMod.Repository}"
+                                Click="OnLinkClick"
+                                Background="Transparent"
+                                Foreground="#89b4fa"
+                                Padding="0"
+                                BorderThickness="0" />
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Requirements ───────────────────────────────── -->
+                <Border Padding="16,8"
+                        BorderBrush="#313244"
+                        BorderThickness="0,0,0,1"
+                        IsVisible="{Binding SelectedMod.HasMissingDependency}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Missing Dependencies"
+                                   Foreground="#f38ba8"
+                                   FontSize="12"
+                                   FontWeight="SemiBold" />
+                        <ItemsControl ItemsSource="{Binding SelectedMod.Requirements}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{Binding}"
+                                               Foreground="#fab387"
+                                               FontSize="11"
+                                               Margin="8,1,0,0" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Actions ────────────────────────────────────── -->
+                <Border Padding="16,10"
+                        BorderBrush="#313244"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="↑ Update"
+                                Command="{Binding UpdateSelectedModCommand}"
+                                IsVisible="{Binding SelectedMod.HasUpdate}"
+                                Background="#f39c12"
+                                Foreground="#1e1e2e"
+                                Padding="10,4" />
+
+                        <Button Content="✕ Uninstall"
+                                Command="{Binding UninstallSelectedModCommand}"
+                                Background="#f38ba8"
+                                Foreground="#1e1e2e"
+                                Padding="10,4" />
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Version history ────────────────────────────── -->
+                <Border Padding="16,10">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Version History"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="#cdd6f4" />
+
+                        <ListBox ItemsSource="{Binding SelectedModVersionHistory}"
+                                 SelectedItem="{Binding SelectedHistoryVersion, Mode=TwoWay}"
+                                 MaxHeight="160"
+                                 Background="#1e1e2e"
+                                 BorderBrush="#45475a"
+                                 BorderThickness="1"
+                                 CornerRadius="4">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:ModVersion">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="4,2">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding Version}"
+                                                       FontSize="12"
+                                                       FontWeight="Medium"
+                                                       Foreground="#cdd6f4" />
+                                            <TextBlock Text="{Binding ArchivedAt}"
+                                                       FontSize="10"
+                                                       Foreground="#6c7086" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Source}"
+                                                   Foreground="#45475a"
+                                                   FontSize="10"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <Button Content="↩ Rollback to Selected Version"
+                                Command="{Binding RollbackSelectedModCommand}"
+                                CommandParameter="{Binding SelectedHistoryVersion.Version}"
+                                IsEnabled="{Binding SelectedHistoryVersion, Converter={StaticResource NullToBool}}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Background="#313244"
+                                Foreground="#cdd6f4"
+                                Padding="10,6" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Panel>
+</UserControl>

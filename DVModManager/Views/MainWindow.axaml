@@ -1,0 +1,226 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:DVModManager.ViewModels"
+        xmlns:views="using:DVModManager.Views"
+        xmlns:conv="using:DVModManager.Converters"
+        x:Class="DVModManager.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="DV Mod Manager"
+        Width="1280" Height="800"
+        MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="#11111b">
+
+    <Window.Resources>
+        <conv:InverseBoolConverter x:Key="InvBool" />
+        <conv:NullToBoolConverter x:Key="NullToBool" />
+        <conv:ModStateToBrushConverter x:Key="StateToBrush" />
+    </Window.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- ═══════════════════════════════════════════════════════════
+             TOOLBAR
+             ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="0"
+                Background="#1e1e2e"
+                Padding="10,8">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+
+                <!-- Left: Profile selector + actions -->
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            Spacing="6">
+
+                    <TextBlock Text="Profile:"
+                               VerticalAlignment="Center"
+                               Foreground="#cdd6f4"
+                               FontSize="13" />
+
+                    <ComboBox ItemsSource="{Binding ProfileNames}"
+                              Text="{Binding SelectedProfileName, Mode=TwoWay}"
+                              IsEditable="True"
+                              MinWidth="160"
+                              Background="#313244"
+                              BorderBrush="#45475a" />
+
+                    <Button Content="Save"
+                            Command="{Binding SaveCurrentProfileCommand}"
+                            ToolTip.Tip="Save current mod selection as the active profile"
+                            Background="#313244"
+                            Foreground="#cdd6f4"
+                            Padding="10,4" />
+
+                    <Button Content="Manage Profiles"
+                            Command="{Binding OpenProfilesCommand}"
+                            ToolTip.Tip="Load, import, export or delete profiles"
+                            Background="#313244"
+                            Foreground="#cdd6f4"
+                            Padding="10,4" />
+                </StackPanel>
+
+                <!-- Center: spacer -->
+                <Panel Grid.Column="1" />
+
+                <!-- Right: global actions -->
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="6">
+
+                    <Button Content="⟳ Refresh"
+                            Command="{Binding RefreshModsCommand}"
+                            ToolTip.Tip="Rescan the Mods folder"
+                            Background="#313244"
+                            Foreground="#cdd6f4"
+                            Padding="10,4" />
+
+                    <Button Content="⏏ Unload All"
+                            Command="{Binding DeactivateAllModsCommand}"
+                            ToolTip.Tip="Deactivate all currently active mods"
+                            Background="#313244"
+                            Foreground="#cdd6f4"
+                            Padding="10,4" />
+
+                    <Button Content="↑ Check Updates"
+                            Command="{Binding CheckUpdatesCommand}"
+                            ToolTip.Tip="Check all mods for available updates"
+                            Background="#313244"
+                            Foreground="#cdd6f4"
+                            Padding="10,4" />
+
+                    <Button Content="↑↑ Update All"
+                            Command="{Binding UpdateAllModsCommand}"
+                            ToolTip.Tip="Download and install all available updates"
+                            Background="#45475a"
+                            Foreground="#cdd6f4"
+                            Padding="10,4" />
+
+                    <Button Content="⚙"
+                            Command="{Binding OpenSettingsCommand}"
+                            ToolTip.Tip="Open settings"
+                            Background="#313244"
+                            Foreground="#cdd6f4"
+                            FontSize="15"
+                            Padding="10,4" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             MAIN CONTENT: Available | Arrows | Active | Detail
+             ═══════════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,*,Auto,300">
+
+            <!-- Available Mods -->
+            <views:ModListView Grid.Column="0"
+                               Header="Available Mods"
+                               Mods="{Binding FilteredAvailableMods}"
+                               Filter="{Binding AvailableFilter, Mode=TwoWay}"
+                               SelectedMod="{Binding SelectedMod, Mode=TwoWay}" />
+
+            <!-- Activate / Deactivate buttons -->
+            <StackPanel Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Spacing="8"
+                        Margin="4,0">
+
+                <Button Content="▶"
+                        Command="{Binding ActivateSelectedModCommand}"
+                        ToolTip.Tip="Activate selected mod"
+                        Width="36" Height="36"
+                        Background="#89b4fa"
+                        Foreground="#1e1e2e"
+                        FontSize="16"
+                        HorizontalContentAlignment="Center"
+                        IsEnabled="{Binding IsGameRunning, Converter={StaticResource InvBool}}" />
+
+                <Button Content="◀"
+                        Command="{Binding DeactivateSelectedModCommand}"
+                        ToolTip.Tip="Deactivate selected mod"
+                        Width="36" Height="36"
+                        Background="#f38ba8"
+                        Foreground="#1e1e2e"
+                        FontSize="16"
+                        HorizontalContentAlignment="Center"
+                        IsEnabled="{Binding IsGameRunning, Converter={StaticResource InvBool}}" />
+
+                <Button Content="⊕"
+                        Command="{Binding InstallModFromFileCommand}"
+                        ToolTip.Tip="Install mod from archive"
+                        Width="36" Height="36"
+                        Background="#a6e3a1"
+                        Foreground="#1e1e2e"
+                        FontSize="16"
+                        HorizontalContentAlignment="Center"
+                        IsEnabled="{Binding IsGameRunning, Converter={StaticResource InvBool}}" />
+            </StackPanel>
+
+            <!-- Active Mods -->
+            <views:ModListView Grid.Column="2"
+                               Header="Active Mods"
+                               Mods="{Binding FilteredActiveMods}"
+                               Filter="{Binding ActiveFilter, Mode=TwoWay}"
+                               SelectedMod="{Binding SelectedMod, Mode=TwoWay}" />
+
+            <!-- Splitter -->
+            <GridSplitter Grid.Column="3"
+                          Width="4"
+                          Background="#313244"
+                          ResizeBehavior="PreviousAndNext" />
+
+            <!-- Detail panel -->
+            <views:ModDetailPanel Grid.Column="4" />
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             STATUS BAR
+             ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="2"
+                Background="#1e1e2e"
+                Padding="10,5"
+                BorderThickness="0,1,0,0"
+                BorderBrush="#313244">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+
+                <!-- Game status indicator -->
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            Spacing="6">
+                    <Ellipse Width="10" Height="10" Fill="#a6e3a1"
+                             IsVisible="{Binding IsGameRunning}" />
+                    <Ellipse Width="10" Height="10" Fill="#6c7086"
+                             IsVisible="{Binding IsGameRunning, Converter={StaticResource InvBool}}" />
+                    <TextBlock Text="Game Running"
+                               IsVisible="{Binding IsGameRunning}"
+                               Foreground="#a6e3a1"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="Game Not Running"
+                               IsVisible="{Binding IsGameRunning, Converter={StaticResource InvBool}}"
+                               Foreground="#6c7086"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Status message -->
+                <TextBlock Grid.Column="1"
+                           Text="{Binding StatusMessage}"
+                           Foreground="#a6adc8"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           Margin="16,0,0,0" />
+
+                <!-- Busy indicator -->
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            IsVisible="{Binding IsBusy}">
+                    <TextBlock Text="{Binding BusyMessage}"
+                               Foreground="#89b4fa"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
