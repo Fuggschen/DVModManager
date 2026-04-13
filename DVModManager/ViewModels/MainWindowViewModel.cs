@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -24,6 +25,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private ObservableCollection<ModItemViewModel> _availableMods = [];
     [ObservableProperty] private ObservableCollection<ModItemViewModel> _activeMods = [];
     [ObservableProperty] private ModItemViewModel? _selectedMod;
+    [ObservableProperty] private ModGroupHeaderViewModel? _selectedGroup;
     [ObservableProperty] private bool _isGameRunning;
     [ObservableProperty] private string _statusMessage = "Ready.";
     [ObservableProperty] private bool _isBusy;
@@ -48,8 +50,9 @@ public partial class MainWindowViewModel : ViewModelBase
     // ── Filter state ──────────────────────────────────────────────────────────────
     [ObservableProperty] private string _availableFilter = "";
     [ObservableProperty] private string _activeFilter = "";
-    [ObservableProperty] private ObservableCollection<ModItemViewModel> _filteredAvailableMods = [];
-    [ObservableProperty] private ObservableCollection<ModItemViewModel> _filteredActiveMods = [];
+    // Mixed list: ModGroupHeaderViewModel | ModItemViewModel
+    [ObservableProperty] private ObservableCollection<object> _filteredAvailableMods = [];
+    [ObservableProperty] private ObservableCollection<object> _filteredActiveMods = [];
 
     public MainWindowViewModel(
         ISettingsService settings,
@@ -76,8 +79,8 @@ public partial class MainWindowViewModel : ViewModelBase
         IsGameRunning = _gameDetection.IsGameRunning();
     }
 
-    partial void OnAvailableFilterChanged(string value) => ApplyFilters();
-    partial void OnActiveFilterChanged(string value) => ApplyFilters();
+    partial void OnAvailableFilterChanged(string value) => ApplyGroupedFilters();
+    partial void OnActiveFilterChanged(string value) => ApplyGroupedFilters();
 
     partial void OnSelectedProfileNameChanged(string value)
     {
@@ -87,17 +90,184 @@ public partial class MainWindowViewModel : ViewModelBase
             _ = ApplyProfileAsync(value);
     }
 
-    private void ApplyFilters()
+    private void ApplyFilters() => ApplyGroupedFilters(); // kept for call-sites not yet updated
+
+    private void ApplyGroupedFilters()
     {
         static bool Matches(ModItemViewModel vm, string filter) =>
             string.IsNullOrEmpty(filter) ||
             vm.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
             vm.Author.Contains(filter, StringComparison.OrdinalIgnoreCase);
 
-        FilteredAvailableMods = new ObservableCollection<ModItemViewModel>(
-            AvailableMods.Where(m => Matches(m, AvailableFilter)));
-        FilteredActiveMods = new ObservableCollection<ModItemViewModel>(
-            ActiveMods.Where(m => Matches(m, ActiveFilter)));
+        var groups   = _settings.Settings.ModGroups;
+        var collapsed = _settings.Settings.CollapsedGroupIds;
+
+        // Index mods by ID for quick lookup
+        var availableById = new Dictionary<string, ModItemViewModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in AvailableMods) if (!string.IsNullOrEmpty(m.Id)) availableById[m.Id] = m;
+        var activeById = new Dictionary<string, ModItemViewModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in ActiveMods) if (!string.IsNullOrEmpty(m.Id)) activeById[m.Id] = m;
+
+        var newAvailable = new ObservableCollection<object>();
+        var newActive    = new ObservableCollection<object>();
+
+        // Track which mods have been placed into a group
+        var groupedAvailable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var groupedActive    = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groups)
+        {
+            bool isCollapsed = collapsed.Contains(group.Id);
+
+            // ---- Available panel ----
+            var availItems = new List<ModItemViewModel>();
+            foreach (var modId in group.ModIds)
+            {
+                if (availableById.TryGetValue(modId, out var vm))
+                {
+                    if (Matches(vm, AvailableFilter))
+                    {
+                        vm.GroupId = group.Id;
+                        availItems.Add(vm);
+                        groupedAvailable.Add(modId);
+                    }
+                }
+                else if (!activeById.ContainsKey(modId))
+                {
+                    // On disk in neither panel — ghost it in Available
+                    var ghost = ModItemViewModel.CreateMissing(modId);
+                    ghost.GroupId = group.Id;
+                    if (Matches(ghost, AvailableFilter))
+                    {
+                        availItems.Add(ghost);
+                        groupedAvailable.Add(modId);
+                    }
+                }
+            }
+            if (availItems.Count > 0 || group.ModIds.Count == 0)
+            {
+                // Always show empty groups in the Available panel so new groups are visible
+                newAvailable.Add(BuildHeader(group, availItems.Count, isCollapsed));
+                if (!isCollapsed)
+                    foreach (var item in availItems) newAvailable.Add(item);
+            }
+
+            // ---- Active panel ----
+            var activeItems = new List<ModItemViewModel>();
+            foreach (var modId in group.ModIds)
+            {
+                if (activeById.TryGetValue(modId, out var vm))
+                {
+                    if (Matches(vm, ActiveFilter))
+                    {
+                        vm.GroupId = group.Id;
+                        activeItems.Add(vm);
+                        groupedActive.Add(modId);
+                    }
+                }
+            }
+            if (activeItems.Count > 0)
+            {
+                newActive.Add(BuildHeader(group, activeItems.Count, isCollapsed));
+                if (!isCollapsed)
+                    foreach (var item in activeItems) newActive.Add(item);
+            }
+        }
+
+        // Ungrouped mods at the bottom
+        foreach (var vm in AvailableMods)
+        {
+            if (!groupedAvailable.Contains(vm.Id) && Matches(vm, AvailableFilter))
+            {
+                vm.GroupId = null;
+                newAvailable.Add(vm);
+            }
+        }
+        foreach (var vm in ActiveMods)
+        {
+            if (!groupedActive.Contains(vm.Id) && Matches(vm, ActiveFilter))
+            {
+                vm.GroupId = null;
+                newActive.Add(vm);
+            }
+        }
+
+        FilteredAvailableMods = newAvailable;
+        FilteredActiveMods    = newActive;
+    }
+
+    private ModGroupHeaderViewModel BuildHeader(ModGroup group, int count, bool isCollapsed) =>
+        new(
+            group.Id, group.Name, count, isCollapsed,
+            onRename: RenameGroupAsync,
+            onDelete: DeleteGroupAsync,
+            onToggle: ToggleGroupCollapseAsync);
+
+    // ── Group operations ──────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private async Task AddGroupAsync()
+    {
+        var group = new ModGroup { Id = Guid.NewGuid().ToString(), Name = "New Group" };
+        _settings.Settings.ModGroups.Add(group);
+        await _settings.SaveAsync();
+        ApplyGroupedFilters();
+    }
+
+    private async Task RenameGroupAsync(string groupId, string newName)
+    {
+        var group = _settings.Settings.ModGroups.FirstOrDefault(g => g.Id == groupId);
+        if (group == null) return;
+        group.Name = newName;
+        await _settings.SaveAsync();
+        ApplyGroupedFilters();
+    }
+
+    private async Task DeleteGroupAsync(string groupId)
+    {
+        var group = _settings.Settings.ModGroups.FirstOrDefault(g => g.Id == groupId);
+        if (group == null) return;
+        // Clear GroupId on all mods that were in this group
+        foreach (var vm in AvailableMods.Concat(ActiveMods))
+            if (vm.GroupId == groupId) vm.GroupId = null;
+        _settings.Settings.ModGroups.Remove(group);
+        _settings.Settings.CollapsedGroupIds.Remove(groupId);
+        await _settings.SaveAsync();
+        ApplyGroupedFilters();
+    }
+
+    private async Task ToggleGroupCollapseAsync(string groupId, bool isCollapsed)
+    {
+        if (isCollapsed) _settings.Settings.CollapsedGroupIds.Add(groupId);
+        else             _settings.Settings.CollapsedGroupIds.Remove(groupId);
+        await _settings.SaveAsync();
+        ApplyGroupedFilters();
+    }
+
+    public async Task AssignModToGroupAsync(string modId, string? groupId)
+    {
+        // Remove from any existing group
+        foreach (var g in _settings.Settings.ModGroups)
+            g.ModIds.Remove(modId);
+
+        // Add to new group if specified
+        if (groupId != null)
+        {
+            var target = _settings.Settings.ModGroups.FirstOrDefault(g => g.Id == groupId);
+            if (target != null && !target.ModIds.Contains(modId))
+                target.ModIds.Add(modId);
+        }
+
+        await _settings.SaveAsync();
+        ApplyGroupedFilters();
+    }
+
+    public async Task RemoveMissingModFromGroupAsync(string modId)
+    {
+        foreach (var g in _settings.Settings.ModGroups)
+            g.ModIds.Remove(modId);
+        await _settings.SaveAsync();
+        ApplyGroupedFilters();
     }
 
     // ── Startup ───────────────────────────────────────────────────────────────
@@ -144,30 +314,62 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanModify))]
     private async Task ActivateSelectedModAsync()
     {
-        if (SelectedMod == null || _settings.Settings.GamePath == null) return;
+        if (_settings.Settings.GamePath == null) return;
+
+        // Group selected — activate all available mods in the group
+        if (SelectedGroup != null)
+        {
+            var group = _settings.Settings.ModGroups.FirstOrDefault(g => g.Id == SelectedGroup.GroupId);
+            if (group == null) return;
+            var targets = AvailableMods.Where(m => group.ModIds.Contains(m.Id)).ToList();
+            if (targets.Count == 0) return;
+            SetBusy($"Activating {targets.Count} mod(s)...");
+            int activated = 0;
+            var missingDeps = new List<string>();
+            foreach (var target in targets)
+            {
+                var missing = await AutoActivateDependenciesAsync(target);
+                if (missing.Count > 0)
+                {
+                    target.State = ModState.MissingDependency;
+                    target.HasMissingDependency = true;
+                    missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
+                    continue;
+                }
+                var success = await _modInstall.ActivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+                if (success) { target.SyncFromModel(); MoveToActive(target); activated++; }
+            }
+            ClearBusy();
+            StatusMessage = missingDeps.Count > 0
+                ? $"Activated {activated}/{targets.Count} — missing deps: {string.Join("; ", missingDeps)}"
+                : $"Activated {activated}/{targets.Count} mod(s) in group '{group.Name}'.";
+            return;
+        }
+
+        if (SelectedMod == null) return;
 
         // Capture before any await — ApplyFilters can null SelectedMod
-        var target = SelectedMod;
-        var displayName = target.DisplayName;
+        var mod = SelectedMod;
+        var displayName = mod.DisplayName;
 
         // Try to auto-activate any inactive dependencies first
-        var trulyMissing = await AutoActivateDependenciesAsync(target);
+        var trulyMissing = await AutoActivateDependenciesAsync(mod);
         if (trulyMissing.Count > 0)
         {
-            target.State = ModState.MissingDependency;
-            target.HasMissingDependency = true;
+            mod.State = ModState.MissingDependency;
+            mod.HasMissingDependency = true;
             StatusMessage = $"Missing dependencies for {displayName}: {string.Join(", ", trulyMissing)}";
             return;
         }
 
         SetBusy($"Activating {displayName}...");
-        var success = await _modInstall.ActivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+        var ok = await _modInstall.ActivateModAsync(mod.ModInfo, _settings.Settings.GamePath);
         ClearBusy();
 
-        if (success)
+        if (ok)
         {
-            target.SyncFromModel();
-            MoveToActive(target);
+            mod.SyncFromModel();
+            MoveToActive(mod);
             StatusMessage = $"Activated: {displayName}";
         }
         else
@@ -179,22 +381,43 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanModify))]
     private async Task DeactivateSelectedModAsync()
     {
-        if (SelectedMod == null || _settings.Settings.GamePath == null) return;
+        if (_settings.Settings.GamePath == null) return;
+
+        // Group selected — deactivate all active mods in the group
+        if (SelectedGroup != null)
+        {
+            var group = _settings.Settings.ModGroups.FirstOrDefault(g => g.Id == SelectedGroup.GroupId);
+            if (group == null) return;
+            var targets = ActiveMods.Where(m => group.ModIds.Contains(m.Id)).ToList();
+            if (targets.Count == 0) return;
+            SetBusy($"Deactivating {targets.Count} mod(s)...");
+            int deactivated = 0;
+            foreach (var target in targets)
+            {
+                var success = await _modInstall.DeactivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+                if (success) { target.SyncFromModel(); MoveToInactive(target); deactivated++; }
+            }
+            ClearBusy();
+            StatusMessage = $"Deactivated {deactivated}/{targets.Count} mod(s) in group '{group.Name}'.";
+            return;
+        }
+
+        if (SelectedMod == null) return;
 
         SetBusy($"Deactivating {SelectedMod.DisplayName}...");
-        var success = await _modInstall.DeactivateModAsync(SelectedMod.ModInfo, _settings.Settings.GamePath);
+        var success2 = await _modInstall.DeactivateModAsync(SelectedMod.ModInfo, _settings.Settings.GamePath);
         ClearBusy();
 
-        var displayName = SelectedMod.DisplayName;
-        if (success)
+        var dn = SelectedMod.DisplayName;
+        if (success2)
         {
             SelectedMod.SyncFromModel();
             MoveToInactive(SelectedMod);
-            StatusMessage = $"Deactivated: {displayName}";
+            StatusMessage = $"Deactivated: {dn}";
         }
         else
         {
-            StatusMessage = $"Failed to deactivate: {displayName}";
+            StatusMessage = $"Failed to deactivate: {dn}";
         }
     }
 
@@ -506,12 +729,21 @@ public partial class MainWindowViewModel : ViewModelBase
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
+            // Preserve any pending update state before clearing — RefreshModsAsync
+            // creates new ModInfo/VM instances so update badges would be lost otherwise
+            var pendingUpdates = AvailableMods.Concat(ActiveMods)
+                .Where(m => m.ModInfo.PendingUpdate != null)
+                .ToDictionary(m => m.Id, m => m.ModInfo.PendingUpdate!, StringComparer.OrdinalIgnoreCase);
+
             AvailableMods.Clear();
             ActiveMods.Clear();
 
             foreach (var mod in mods.OrderBy(m => m.EffectiveDisplayName))
             {
                 var vm = new ModItemViewModel(mod);
+                // Re-apply any update badge that was set before the refresh
+                if (pendingUpdates.TryGetValue(vm.Id, out var pending))
+                    vm.ApplyUpdate(pending);
                 if (mod.IsActive) ActiveMods.Add(vm);
                 else AvailableMods.Add(vm);
             }

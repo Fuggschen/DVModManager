@@ -24,6 +24,12 @@ public class AppSettings
 
     public string ActiveProfileName { get; set; } = "Default";
 
+    /// <summary>User-defined visual groups for both mod panels.</summary>
+    public List<ModGroup> ModGroups { get; set; } = [];
+
+    /// <summary>Group IDs that are currently collapsed (persisted).</summary>
+    public HashSet<string> CollapsedGroupIds { get; set; } = [];
+
     // --- Derived paths ---
     public string ProfilesPath => Path.Combine(StoragePath, "profiles");
     public string VersionsPath => Path.Combine(StoragePath, "versions");
