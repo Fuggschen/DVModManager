@@ -600,15 +600,17 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task SaveCurrentProfileAsync()
     {
-        var allMods = AvailableMods.Concat(ActiveMods).Select(v => v.ModInfo).ToList();
+        var activeMods = ActiveMods.Select(v => v.ModInfo).ToList();
         var profile = new ModProfile
         {
             Name = SelectedProfileName,
-            Mods = allMods.Select(m => new ProfileModEntry
+            Mods = activeMods.Select(m => new ProfileModEntry
             {
-                ModId = m.Id,
-                Version = m.Version,
-                IsActive = m.IsActive
+                ModId         = m.Id,
+                Version       = m.Version,
+                IsActive      = true,
+                RepositoryUrl = string.IsNullOrEmpty(m.Repository) ? null : m.Repository,
+                HomePageUrl   = string.IsNullOrEmpty(m.HomePage)   ? null : m.HomePage
             }).ToList()
         };
 
@@ -654,9 +656,91 @@ public partial class MainWindowViewModel : ViewModelBase
         var allMods = AvailableMods.Concat(ActiveMods).Select(v => v.ModInfo).ToList();
         var diff = _profileService.ComputeDiff(profile, allMods);
 
-        if (diff.ToActivate.Count == 0 && diff.ToDeactivate.Count == 0 && diff.ToRollback.Count == 0)
+        bool hasWork = diff.ToActivate.Count > 0 || diff.ToDeactivate.Count > 0
+                    || diff.ToRollback.Count > 0 || diff.ToDownload.Count > 0;
+
+        if (!hasWork)
         {
             StatusMessage = "Profile is already applied.";
+            return;
+        }
+
+        // ── Handle missing mods that need downloading ─────────────────────────
+        if (diff.ToDownload.Count > 0)
+        {
+            var githubEntries = diff.ToDownload.Where(e => !string.IsNullOrEmpty(e.RepositoryUrl)).ToList();
+            var nexusEntries  = diff.ToDownload.Where(e => string.IsNullOrEmpty(e.RepositoryUrl) && !string.IsNullOrEmpty(e.HomePageUrl)).ToList();
+
+            var lines = new List<string>();
+            if (githubEntries.Count > 0)
+            {
+                lines.Add($"Will auto-download from GitHub ({githubEntries.Count}):");
+                lines.AddRange(githubEntries.Select(e => $"  • {e.ModId}"));
+            }
+            if (nexusEntries.Count > 0)
+            {
+                lines.Add($"Will open in browser for manual download ({nexusEntries.Count}):");
+                lines.AddRange(nexusEntries.Select(e => $"  • {e.ModId}"));
+            }
+
+            var confirmed = await _dialogService.ConfirmAsync(
+                "Download Missing Mods",
+                string.Join("\n", lines) + "\n\nProceed with downloads?");
+
+            if (confirmed)
+            {
+                int downloaded = 0;
+                SetBusy($"Downloading missing mods (0/{githubEntries.Count})...");
+
+                foreach (var entry in githubEntries)
+                {
+                    BusyMessage = $"Resolving {entry.ModId}...";
+                    // Build a stub ModInfo so we can call CheckUpdateAsync which
+                    // calls the GitHub releases API to get the asset download URL.
+                    var stub = new ModInfo
+                    {
+                        Id = entry.ModId,
+                        Version = "0.0.0",
+                        Repository = entry.RepositoryUrl!
+                    };
+                    var updateInfo = await _updateService.CheckUpdateAsync(stub);
+                    if (updateInfo?.DownloadUrl != null)
+                    {
+                        BusyMessage = $"Downloading {entry.ModId} ({downloaded + 1}/{githubEntries.Count})...";
+                        var progress = new Progress<double>(p =>
+                            BusyMessage = $"Downloading {entry.ModId} {p:P0} ({downloaded + 1}/{githubEntries.Count})...");
+                        var result = await _modInstall.DownloadAndInstallFromUrlAsync(
+                            updateInfo.DownloadUrl, _settings.Settings.GamePath, _settings.Settings.StoragePath, progress);
+                        if (result != null) downloaded++;
+                        else StatusMessage = $"Download failed for {entry.ModId}.";
+                    }
+                    else
+                    {
+                        StatusMessage = $"Could not resolve download URL for {entry.ModId}.";
+                    }
+                }
+
+                foreach (var entry in nexusEntries)
+                    Helpers.PlatformHelper.Open(entry.HomePageUrl!);
+
+                // Refresh so newly installed mods appear in the diff for activation
+                await RefreshModsAsync();
+                allMods = AvailableMods.Concat(ActiveMods).Select(v => v.ModInfo).ToList();
+                diff = _profileService.ComputeDiff(profile, allMods);
+
+                ClearBusy();
+                if (nexusEntries.Count > 0)
+                    StatusMessage = $"Downloaded {downloaded} mod(s). Nexus mods ({nexusEntries.Count}) opened in browser — install manually then re-apply.";
+            }
+        }
+
+        // ── No remaining work? ────────────────────────────────────────────────
+        if (diff.ToActivate.Count == 0 && diff.ToDeactivate.Count == 0 && diff.ToRollback.Count == 0)
+        {
+            _settings.Settings.ActiveProfileName = profileName;
+            SelectedProfileName = profileName;
+            await _settings.SaveAsync();
+            StatusMessage = $"Applied profile '{profileName}'.";
             return;
         }
 
@@ -763,10 +847,22 @@ public partial class MainWindowViewModel : ViewModelBase
         var profiles = await _profileService.GetProfilesAsync(_settings.Settings.ProfilesPath);
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
+            // Snapshot before Clear() — Avalonia's editable ComboBox blanks its Text
+            // binding when ItemsSource is cleared, wiping SelectedProfileName.
+            var current = SelectedProfileName;
+
             ProfileNames.Clear();
             if (!profiles.Any(p => p.Name == "Default"))
                 ProfileNames.Add("Default");
             foreach (var p in profiles) ProfileNames.Add(p.Name);
+
+            // Restore only if the name still exists; otherwise fall back to the active profile
+            // (or "Default"). This handles the case where the currently-selected profile was deleted.
+            if (!string.IsNullOrEmpty(current) && ProfileNames.Contains(current))
+                SelectedProfileName = current;
+            else
+                SelectedProfileName = _settings.Settings.ActiveProfileName is { Length: > 0 } active
+                    && ProfileNames.Contains(active) ? active : "Default";
         });
     }
 
@@ -802,6 +898,10 @@ public partial class MainWindowViewModel : ViewModelBase
         await vm.LoadProfilesAsync(_settings.Settings.ProfilesPath);
         var dialog = new DVModManager.Views.ProfileDialog { DataContext = vm };
         await dialog.ShowDialog(GetMainWindow());
+
+        // Always refresh so deletions/imports are reflected in the dropdown
+        await RefreshProfileListAsync();
+
         if (vm.Applied && vm.AppliedProfileName != null)
             await ApplyProfileAsync(vm.AppliedProfileName);
     }

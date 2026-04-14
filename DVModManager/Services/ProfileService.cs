@@ -79,10 +79,18 @@ public class ProfileService : IProfileService
         var toActivate = new List<string>();
         var toDeactivate = new List<string>();
         var toRollback = new List<(string, string, string)>();
+        var toDownload = new List<ProfileModEntry>();
 
         foreach (var entry in profile.Mods)
         {
-            if (!currentById.TryGetValue(entry.ModId, out var current)) continue;
+            if (!currentById.TryGetValue(entry.ModId, out var current))
+            {
+                // Only download mods that should be active in this profile
+                if (entry.IsActive &&
+                    (!string.IsNullOrEmpty(entry.RepositoryUrl) || !string.IsNullOrEmpty(entry.HomePageUrl)))
+                    toDownload.Add(entry);
+                continue;
+            }
 
             if (entry.IsActive && !current.IsActive)
                 toActivate.Add(entry.ModId);
@@ -98,7 +106,7 @@ public class ProfileService : IProfileService
         foreach (var mod in currentMods.Where(m => m.IsActive && !profileModIds.Contains(m.Id)))
             toDeactivate.Add(mod.Id);
 
-        return new ProfileDiff(toActivate, toDeactivate, toRollback);
+        return new ProfileDiff(toActivate, toDeactivate, toRollback, toDownload);
     }
 
     private static string GetProfileFilePath(string name, string profilesPath)

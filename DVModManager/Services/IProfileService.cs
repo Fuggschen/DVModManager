@@ -20,4 +20,5 @@ public interface IProfileService
 public record ProfileDiff(
     IReadOnlyList<string> ToActivate,
     IReadOnlyList<string> ToDeactivate,
-    IReadOnlyList<(string ModId, string FromVersion, string ToVersion)> ToRollback);
+    IReadOnlyList<(string ModId, string FromVersion, string ToVersion)> ToRollback,
+    IReadOnlyList<ProfileModEntry> ToDownload);

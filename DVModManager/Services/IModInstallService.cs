@@ -10,5 +10,6 @@ public interface IModInstallService
     Task<bool> UninstallModAsync(ModInfo mod, string gamePath, string storagePath, bool hardDelete = false, CancellationToken ct = default);
     Task<bool> RollbackToVersionAsync(string modId, string version, string gamePath, string storagePath, CancellationToken ct = default);
     Task<bool> UpdateModAsync(ModInfo mod, ModUpdateInfo update, string gamePath, string storagePath, IProgress<double>? progress = null, CancellationToken ct = default);
+    Task<ModInfo?> DownloadAndInstallFromUrlAsync(string downloadUrl, string gamePath, string storagePath, IProgress<double>? progress = null, CancellationToken ct = default);
     Task<string> BackupModsFolderAsync(string gamePath, string storagePath);
 }
