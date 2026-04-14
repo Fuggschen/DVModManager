@@ -19,7 +19,8 @@ public sealed class FileLoggerProvider : ILoggerProvider
     {
         _logDirectory = logDirectory;
         _minLevel = minLevel;
-        Directory.CreateDirectory(logDirectory);
+        try { Directory.CreateDirectory(logDirectory); }
+        catch { /* log directory unavailable – file logging silently disabled */ }
 
         _writerThread = new Thread(WriterLoop) { IsBackground = true, Name = "FileLogger" };
         _writerThread.Start();

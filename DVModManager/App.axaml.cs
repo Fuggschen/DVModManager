@@ -76,12 +76,26 @@ public class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    private static string GetAppDataDirectory()
+    {
+        if (OperatingSystem.IsLinux())
+        {
+            // Respect XDG_CONFIG_HOME if set to a valid absolute path, otherwise fall back to ~/.config
+            var xdg = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+            var configBase = !string.IsNullOrEmpty(xdg) && Path.IsPathRooted(xdg)
+                ? xdg
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+            return Path.Combine(configBase, "DVModManager");
+        }
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "DVModManager");
+    }
+
     private static void ConfigureServices(IServiceCollection services)
     {
         // Logging
-        var logDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "DVModManager", "logs");
+        var logDir = Path.Combine(GetAppDataDirectory(), "logs");
         services.AddLogging(b =>
         {
             b.AddConsole();
