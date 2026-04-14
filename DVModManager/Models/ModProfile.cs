@@ -13,4 +13,8 @@ public class ProfileModEntry
     public string ModId { get; set; } = "";
     public string Version { get; set; } = "";
     public bool IsActive { get; set; }
+    /// <summary>GitHub repository URL (e.g. https://github.com/owner/repo). Used to auto-download on import.</summary>
+    public string? RepositoryUrl { get; set; }
+    /// <summary>Nexus Mods or other homepage URL. Opened in the browser when auto-download is not possible.</summary>
+    public string? HomePageUrl { get; set; }
 }

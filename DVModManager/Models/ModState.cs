@@ -6,5 +6,6 @@ public enum ModState
     Inactive,
     UpdateAvailable,
     MissingDependency,
-    NoMetadata
+    NoMetadata,
+    Missing   // installed in a group but no longer found on disk
 }

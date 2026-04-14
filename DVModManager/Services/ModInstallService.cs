@@ -356,6 +356,53 @@ public class ModInstallService : IModInstallService
         }
     }
 
+    // ── Download and install from URL ──────────────────────────────────────────────
+
+    public async Task<ModInfo?> DownloadAndInstallFromUrlAsync(
+        string downloadUrl, string gamePath, string storagePath,
+        IProgress<double>? progress = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var downloadDir = Path.Combine(storagePath, "downloads", "profile_imports");
+            Directory.CreateDirectory(downloadDir);
+            var downloadPath = Path.Combine(downloadDir, $"{Guid.NewGuid()}.zip");
+
+            using var http = new HttpClient();
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
+            using var response = await http.GetAsync(
+                downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            response.EnsureSuccessStatusCode();
+
+            var totalBytes = response.Content.Headers.ContentLength;
+            await using var netStream = await response.Content.ReadAsStreamAsync(ct);
+            {
+                await using var fileStream = File.Create(downloadPath);
+                var buffer = new byte[81920];
+                long downloaded = 0;
+                int read;
+                while ((read = await netStream.ReadAsync(buffer, ct)) > 0)
+                {
+                    await fileStream.WriteAsync(buffer.AsMemory(0, read), ct);
+                    downloaded += read;
+                    if (totalBytes > 0)
+                        progress?.Report((double)downloaded / totalBytes.Value);
+                }
+            }
+
+            var result = await InstallFromArchiveAsync(downloadPath, gamePath, storagePath, activate: false, ct);
+
+            try { File.Delete(downloadPath); } catch { /* best-effort cleanup */ }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DownloadAndInstall failed for URL {Url}", downloadUrl);
+            return null;
+        }
+    }
+
     // ── Backup whole Mods folder ──────────────────────────────────────────────
 
     public async Task<string> BackupModsFolderAsync(string gamePath, string storagePath)
