@@ -9,6 +9,7 @@ public partial class SettingsViewModel : ViewModelBase
 {
     private readonly IDialogService _dialogService;
     private readonly IGameDetectionService _gameDetection;
+    private readonly ILocalizationService? _localization;
 
     public bool Saved { get; private set; }
 
@@ -20,11 +21,31 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private bool _backupBeforeChanges = true;
     [ObservableProperty] private int _maxCacheGb = 5;
     [ObservableProperty] private string _themeVariant = "Dark";
+    [ObservableProperty] private string _language = "en";
+
+    // Available language options for the UI
+    public List<string> AvailableLanguages { get; } = ["en", "de", "fr", "zh"];
+
+    // Display names for languages (for the dropdown)
+    public Dictionary<string, string> LanguageDisplayNames => new()
+    {
+        { "en", "English" },
+        { "de", "Deutsch" },
+        { "fr", "Français" },
+        { "zh", "中文" }
+    };
 
     public SettingsViewModel(IDialogService dialogService, IGameDetectionService gameDetection)
     {
         _dialogService = dialogService;
         _gameDetection = gameDetection;
+        
+        // Try to get localization service if available
+        try
+        {
+            _localization = App.Services.GetService(typeof(ILocalizationService)) as ILocalizationService;
+        }
+        catch { }
     }
 
     public void Load(AppSettings settings)
@@ -37,6 +58,7 @@ public partial class SettingsViewModel : ViewModelBase
         BackupBeforeChanges = settings.BackupBeforeChanges;
         MaxCacheGb = (int)(settings.MaxCacheSizeBytes / (1024 * 1024 * 1024));
         ThemeVariant = settings.ThemeVariant;
+        Language = settings.Language;
         Saved = false;
     }
 
@@ -50,6 +72,7 @@ public partial class SettingsViewModel : ViewModelBase
         settings.BackupBeforeChanges = BackupBeforeChanges;
         settings.MaxCacheSizeBytes = (long)MaxCacheGb * 1024 * 1024 * 1024;
         settings.ThemeVariant = ThemeVariant;
+        settings.Language = Language;
     }
 
     [RelayCommand]

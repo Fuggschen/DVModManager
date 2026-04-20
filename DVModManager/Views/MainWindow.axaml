@@ -5,7 +5,7 @@
         xmlns:conv="using:DVModManager.Converters"
         x:Class="DVModManager.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="DV Mod Manager"
+        Title="{Binding WindowTitle}"
         Width="1280" Height="800"
         MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen"
@@ -15,6 +15,7 @@
         <conv:InverseBoolConverter x:Key="InvBool" />
         <conv:NullToBoolConverter x:Key="NullToBool" />
         <conv:ModStateToBrushConverter x:Key="StateToBrush" />
+        <conv:StringKeyConverter x:Key="LocalizeConverter" />
     </Window.Resources>
 
     <Grid RowDefinitions="Auto,*,Auto">
@@ -32,7 +33,7 @@
                             Orientation="Horizontal"
                             Spacing="6">
 
-                    <TextBlock Text="Profile:"
+                    <TextBlock Text="{conv:Localize toolbar.profile.label}"
                                VerticalAlignment="Center"
                                Foreground="#cdd6f4"
                                FontSize="13" />
@@ -44,16 +45,16 @@
                               Background="#313244"
                               BorderBrush="#45475a" />
 
-                    <Button Content="Save"
+                    <Button Content="{conv:Localize toolbar.save_profile}"
                             Command="{Binding SaveCurrentProfileCommand}"
-                            ToolTip.Tip="Save current mod selection as the active profile"
+                            ToolTip.Tip="{conv:Localize toolbar.save_profile.tooltip}"
                             Background="#313244"
                             Foreground="#cdd6f4"
                             Padding="10,4" />
 
-                    <Button Content="Manage Profiles"
+                    <Button Content="{conv:Localize toolbar.manage_profiles}"
                             Command="{Binding OpenProfilesCommand}"
-                            ToolTip.Tip="Load, import, export or delete profiles"
+                            ToolTip.Tip="{conv:Localize toolbar.manage_profiles.tooltip}"
                             Background="#313244"
                             Foreground="#cdd6f4"
                             Padding="10,4" />
@@ -67,37 +68,37 @@
                             Orientation="Horizontal"
                             Spacing="6">
 
-                    <Button Content="⟳ Refresh"
+                    <Button Content="{conv:Localize toolbar.refresh}"
                             Command="{Binding RefreshModsCommand}"
-                            ToolTip.Tip="Rescan the Mods folder"
+                            ToolTip.Tip="{conv:Localize toolbar.refresh.tooltip}"
                             Background="#313244"
                             Foreground="#cdd6f4"
                             Padding="10,4" />
 
-                    <Button Content="⏏ Unload All"
+                    <Button Content="{conv:Localize toolbar.unload_all}"
                             Command="{Binding DeactivateAllModsCommand}"
-                            ToolTip.Tip="Deactivate all currently active mods"
+                            ToolTip.Tip="{conv:Localize toolbar.unload_all.tooltip}"
                             Background="#313244"
                             Foreground="#cdd6f4"
                             Padding="10,4" />
 
-                    <Button Content="↑ Check Updates"
+                    <Button Content="{conv:Localize toolbar.check_updates}"
                             Command="{Binding CheckUpdatesCommand}"
-                            ToolTip.Tip="Check all mods for available updates"
+                            ToolTip.Tip="{conv:Localize toolbar.check_updates.tooltip}"
                             Background="#313244"
                             Foreground="#cdd6f4"
                             Padding="10,4" />
 
-                    <Button Content="↑↑ Update All"
+                    <Button Content="{conv:Localize toolbar.update_all}"
                             Command="{Binding UpdateAllModsCommand}"
-                            ToolTip.Tip="Download and install all available updates"
+                            ToolTip.Tip="{conv:Localize toolbar.update_all.tooltip}"
                             Background="#45475a"
                             Foreground="#cdd6f4"
                             Padding="10,4" />
 
-                    <Button Content="⚙"
+                    <Button Content="{conv:Localize toolbar.settings}"
                             Command="{Binding OpenSettingsCommand}"
-                            ToolTip.Tip="Open settings"
+                            ToolTip.Tip="{conv:Localize toolbar.settings.tooltip}"
                             Background="#313244"
                             Foreground="#cdd6f4"
                             FontSize="15"
@@ -113,7 +114,7 @@
 
             <!-- Available Mods -->
             <views:ModListView Grid.Column="0"
-                               Header="Available Mods"
+                               Header="{Binding PanelAvailableHeader}"
                                Mods="{Binding FilteredAvailableMods}"
                                Filter="{Binding AvailableFilter, Mode=TwoWay}"
                                SelectedMod="{Binding SelectedMod, Mode=TwoWay}" />
@@ -126,7 +127,7 @@
 
                 <Button Content="▶"
                         Command="{Binding ActivateSelectedModCommand}"
-                        ToolTip.Tip="Activate selected mod"
+                        ToolTip.Tip="{conv:Localize activate.button.tooltip}"
                         Width="36" Height="36"
                         Background="#89b4fa"
                         Foreground="#1e1e2e"
@@ -136,7 +137,7 @@
 
                 <Button Content="◀"
                         Command="{Binding DeactivateSelectedModCommand}"
-                        ToolTip.Tip="Deactivate selected mod"
+                        ToolTip.Tip="{conv:Localize deactivate.button.tooltip}"
                         Width="36" Height="36"
                         Background="#f38ba8"
                         Foreground="#1e1e2e"
@@ -146,7 +147,7 @@
 
                 <Button Content="⊕"
                         Command="{Binding InstallModFromFileCommand}"
-                        ToolTip.Tip="Install mod from archive"
+                        ToolTip.Tip="{conv:Localize install.button.tooltip}"
                         Width="36" Height="36"
                         Background="#a6e3a1"
                         Foreground="#1e1e2e"
@@ -157,7 +158,7 @@
 
             <!-- Active Mods -->
             <views:ModListView Grid.Column="2"
-                               Header="Active Mods"
+                               Header="{Binding PanelActiveHeader}"
                                Mods="{Binding FilteredActiveMods}"
                                Filter="{Binding ActiveFilter, Mode=TwoWay}"
                                SelectedMod="{Binding SelectedMod, Mode=TwoWay}" />
@@ -190,12 +191,12 @@
                              IsVisible="{Binding IsGameRunning}" />
                     <Ellipse Width="10" Height="10" Fill="#6c7086"
                              IsVisible="{Binding IsGameRunning, Converter={StaticResource InvBool}}" />
-                    <TextBlock Text="Game Running"
+                    <TextBlock Text="{conv:Localize statusbar.game_running}"
                                IsVisible="{Binding IsGameRunning}"
                                Foreground="#a6e3a1"
                                FontSize="12"
                                VerticalAlignment="Center" />
-                    <TextBlock Text="Game Not Running"
+                    <TextBlock Text="{conv:Localize statusbar.game_not_running}"
                                IsVisible="{Binding IsGameRunning, Converter={StaticResource InvBool}}"
                                Foreground="#6c7086"
                                FontSize="12"

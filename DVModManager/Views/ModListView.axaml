@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:DVModManager.Views"
              xmlns:vm="using:DVModManager.ViewModels"
+             xmlns:conv="using:DVModManager.Converters"
              x:Class="DVModManager.Views.ModListView"
              x:Name="Root">
 
@@ -24,23 +25,22 @@
                                VerticalAlignment="Center" />
                     <Button Grid.Column="1"
                             Command="{Binding AddGroupCommand}"
+                            Content="{conv:Localize button.add_group}"
                             Background="Transparent"
                             BorderThickness="0"
                             Foreground="#89b4fa"
                             FontSize="12"
                             Padding="6,2"
-                            ToolTip.Tip="Add Group"
+                            ToolTip.Tip="{conv:Localize button.add_group}"
                             Cursor="Hand"
-                            VerticalAlignment="Center">
-                        ＋ Group
-                    </Button>
+                            VerticalAlignment="Center" />
                 </Grid>
             </Border>
 
             <!-- Search box -->
             <TextBox Grid.Row="1"
                      Text="{Binding #Root.Filter, Mode=TwoWay}"
-                     PlaceholderText="Search..."
+                     PlaceholderText="{conv:Localize filter.search_mods}"
                      Background="#1e1e2e"
                      BorderBrush="#45475a"
                      BorderThickness="0,1,0,1"
@@ -135,14 +135,14 @@
                                             Foreground="#89b4fa"
                                             FontSize="11"
                                             Padding="3,1"
-                                            ToolTip.Tip="Rename group">✏</Button>
+                                            ToolTip.Tip="{conv:Localize button.rename_group}">✏</Button>
                                     <Button Command="{Binding DeleteGroupCommand}"
                                             Background="Transparent"
                                             BorderThickness="0"
                                             Foreground="#f38ba8"
                                             FontSize="11"
                                             Padding="3,1"
-                                            ToolTip.Tip="Delete group">🗑</Button>
+                                            ToolTip.Tip="{conv:Localize button.delete_group}">🗑</Button>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -196,7 +196,7 @@
                                         Padding="4,1"
                                         VerticalAlignment="Center"
                                         IsVisible="{Binding HasUpdate}">
-                                    <TextBlock Text="UPDATE"
+                                    <TextBlock Text="{conv:Localize badge.update}"
                                                FontSize="9"
                                                FontWeight="Bold"
                                                Foreground="#1e1e2e" />

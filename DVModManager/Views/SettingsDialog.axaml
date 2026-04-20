@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:DVModManager.ViewModels"
+        xmlns:conv="using:DVModManager.Converters"
         x:Class="DVModManager.Views.SettingsDialog"
         x:DataType="vm:SettingsViewModel"
-        Title="Settings"
+        Title="{conv:Localize settings.title}"
         Width="600" Height="500"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
@@ -18,29 +19,29 @@
 
                 <!-- ── Game Path ──────────────────────────────────── -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="Derail Valley Installation"
+                    <TextBlock Text="{conv:Localize settings.section.game_path}"
                                FontSize="13"
                                FontWeight="SemiBold"
                                Foreground="#cdd6f4" />
                     <Grid ColumnDefinitions="*,Auto,Auto">
                         <TextBox Grid.Column="0"
                                  Text="{Binding GamePath, Mode=TwoWay}"
-                                 PlaceholderText="Path to Derail Valley folder..."
+                                 PlaceholderText="{conv:Localize settings.game_path.placeholder}"
                                  Background="#313244"
                                  BorderBrush="#45475a"
                                  Foreground="#cdd6f4"
                                  Margin="0,0,6,0" />
                         <Button Grid.Column="1"
-                                Content="Browse"
+                                Content="{conv:Localize settings.game_path.browse}"
                                 Command="{Binding BrowseGamePathCommand}"
                                 Background="#45475a"
                                 Foreground="#cdd6f4"
                                 Padding="10,6"
                                 Margin="0,0,4,0" />
                         <Button Grid.Column="2"
-                                Content="Auto"
+                                Content="{conv:Localize settings.game_path.auto}"
                                 Command="{Binding DetectGamePathCommand}"
-                                ToolTip.Tip="Auto-detect via Steam"
+                                ToolTip.Tip="{conv:Localize settings.game_path.auto.tooltip}"
                                 Background="#89b4fa"
                                 Foreground="#1e1e2e"
                                 Padding="10,6" />
@@ -49,11 +50,11 @@
 
                 <!-- ── Storage Path ───────────────────────────────── -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="Storage Folder"
+                    <TextBlock Text="{conv:Localize settings.section.storage}"
                                FontSize="13"
                                FontWeight="SemiBold"
                                Foreground="#cdd6f4" />
-                    <TextBlock Text="Where version archives, profiles and logs are kept."
+                    <TextBlock Text="{conv:Localize settings.storage.description}"
                                Foreground="#6c7086"
                                FontSize="11" />
                     <Grid ColumnDefinitions="*,Auto">
@@ -64,7 +65,7 @@
                                  Foreground="#cdd6f4"
                                  Margin="0,0,6,0" />
                         <Button Grid.Column="1"
-                                Content="Browse"
+                                Content="{conv:Localize settings.storage.browse}"
                                 Command="{Binding BrowseStoragePathCommand}"
                                 Background="#45475a"
                                 Foreground="#cdd6f4"
@@ -74,15 +75,15 @@
 
                 <!-- ── Nexus API Key ──────────────────────────────── -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="Nexus Mods API Key"
+                    <TextBlock Text="{conv:Localize settings.section.nexus}"
                                FontSize="13"
                                FontWeight="SemiBold"
                                Foreground="#cdd6f4" />
-                    <TextBlock Text="Required for Nexus Mods update checks. Leave blank to skip."
+                    <TextBlock Text="{conv:Localize settings.nexus.description}"
                                Foreground="#6c7086"
                                FontSize="11" />
                     <TextBox Text="{Binding NexusApiKey, Mode=TwoWay}"
-                             PlaceholderText="Your Nexus Mods API key..."
+                             PlaceholderText="{conv:Localize settings.nexus.placeholder}"
                              PasswordChar="•"
                              Background="#313244"
                              BorderBrush="#45475a"
@@ -91,15 +92,15 @@
 
                 <!-- ── GitHub Token ───────────────────────────────── -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="GitHub Token (optional)"
+                    <TextBlock Text="{conv:Localize settings.section.github}"
                                FontSize="13"
                                FontWeight="SemiBold"
                                Foreground="#cdd6f4" />
-                    <TextBlock Text="Increases the GitHub API rate limit from 60 to 5000 requests/hour."
+                    <TextBlock Text="{conv:Localize settings.github.description}"
                                Foreground="#6c7086"
                                FontSize="11" />
                     <TextBox Text="{Binding GitHubToken, Mode=TwoWay}"
-                             PlaceholderText="ghp_..."
+                             PlaceholderText="{conv:Localize settings.github.placeholder}"
                              PasswordChar="•"
                              Background="#313244"
                              BorderBrush="#45475a"
@@ -108,14 +109,14 @@
 
                 <!-- ── Misc settings ──────────────────────────────── -->
                 <StackPanel Spacing="10">
-                    <TextBlock Text="General"
+                    <TextBlock Text="{conv:Localize settings.section.general}"
                                FontSize="13"
                                FontWeight="SemiBold"
                                Foreground="#cdd6f4" />
 
-                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" VerticalAlignment="Center">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" VerticalAlignment="Center">
                         <TextBlock Grid.Row="0" Grid.Column="0"
-                                   Text="Check for updates on startup"
+                                   Text="{conv:Localize settings.auto_check_updates}"
                                    Foreground="#cdd6f4"
                                    FontSize="13"
                                    VerticalAlignment="Center" />
@@ -124,7 +125,7 @@
                                   HorizontalAlignment="Right" />
 
                         <TextBlock Grid.Row="1" Grid.Column="0"
-                                   Text="Backup mods before bulk changes"
+                                   Text="{conv:Localize settings.backup_before_changes}"
                                    Foreground="#cdd6f4"
                                    FontSize="13"
                                    VerticalAlignment="Center"
@@ -134,7 +135,7 @@
                                     HorizontalAlignment="Right"
                                     Spacing="6"
                                     Margin="0,8,0,0">
-                            <Button Content="Open Folder"
+                            <Button Content="{conv:Localize settings.backup_folder_button}"
                                     Command="{Binding OpenBackupFolderCommand}"
                                     Background="#313244"
                                     Foreground="#cdd6f4"
@@ -145,7 +146,7 @@
                         </StackPanel>
 
                         <TextBlock Grid.Row="2" Grid.Column="0"
-                                   Text="Max version cache size (GB)"
+                                   Text="{conv:Localize settings.max_cache_size}"
                                    Foreground="#cdd6f4"
                                    FontSize="13"
                                    VerticalAlignment="Center"
@@ -160,6 +161,22 @@
                                        Foreground="#cdd6f4"
                                        HorizontalAlignment="Right"
                                        Margin="0,8,0,0" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0"
+                                   Text="{conv:Localize settings.language}"
+                                   Foreground="#cdd6f4"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"
+                                   Margin="0,8,0,0" />
+                        <ComboBox Grid.Row="3" Grid.Column="1"
+                                  ItemsSource="{Binding AvailableLanguages}"
+                                  SelectedItem="{Binding Language, Mode=TwoWay}"
+                                  Background="#313244"
+                                  BorderBrush="#45475a"
+                                  Foreground="#cdd6f4"
+                                  Width="100"
+                                  HorizontalAlignment="Right"
+                                  Margin="0,8,0,0" />
                     </Grid>
                 </StackPanel>
             </StackPanel>
@@ -171,13 +188,13 @@
                     HorizontalAlignment="Right"
                     Spacing="8"
                     Margin="0,16,0,0">
-            <Button Content="Cancel"
+            <Button Content="{conv:Localize settings.button.cancel}"
                     Command="{Binding CancelCommand}"
                     CommandParameter="{Binding $parent[Window]}"
                     Background="#313244"
                     Foreground="#cdd6f4"
                     Padding="20,8" />
-            <Button Content="Save"
+            <Button Content="{conv:Localize settings.button.save}"
                     Command="{Binding SaveCommand}"
                     CommandParameter="{Binding $parent[Window]}"
                     Background="#a6e3a1"

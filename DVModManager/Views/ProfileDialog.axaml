@@ -5,7 +5,7 @@
         xmlns:conv="using:DVModManager.Converters"
         x:Class="DVModManager.Views.ProfileDialog"
         x:DataType="vm:ProfileViewModel"
-        Title="Manage Profiles"
+        Title="{conv:Localize profile.dialog_title}"
         Width="500" Height="480"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
@@ -23,7 +23,7 @@
             <!-- Profile list -->
             <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto" Margin="0,0,12,0">
                 <TextBlock Grid.Row="0"
-                           Text="Saved Profiles"
+                           Text="{conv:Localize profile.saved_profiles}"
                            FontSize="13"
                            FontWeight="SemiBold"
                            Foreground="#cdd6f4"
@@ -59,7 +59,7 @@
                         CornerRadius="4"
                         Padding="8,6"
                         Margin="0,8,0,0">
-                    <TextBlock Text="Use the main toolbar to save the current mod selection as a new profile."
+                    <TextBlock Text="{conv:Localize profile.help_text}"
                                Foreground="#6c7086"
                                FontSize="11"
                                TextWrapping="Wrap" />
@@ -72,7 +72,7 @@
                         Spacing="8"
                         Margin="0,30,0,0">
 
-                <Button Content="✓ Apply"
+                <Button Content="{conv:Localize profile.button_apply}"
                         Command="{Binding ApplySelectedCommand}"
                         CommandParameter="{Binding $parent[Window]}"
                         IsEnabled="{Binding SelectedProfile, Converter={StaticResource NullToBool}}"
@@ -82,7 +82,7 @@
                         Foreground="#1e1e2e"
                         Padding="10,6" />
 
-                <Button Content="Export"
+                <Button Content="{conv:Localize profile.button_export}"
                         Command="{Binding ExportSelectedCommand}"
                         IsEnabled="{Binding SelectedProfile, Converter={StaticResource NullToBool}}"
                         HorizontalAlignment="Stretch"
@@ -91,7 +91,7 @@
                         Foreground="#cdd6f4"
                         Padding="10,6" />
 
-                <Button Content="Import"
+                <Button Content="{conv:Localize profile.button_import}"
                         Command="{Binding ImportCommand}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
@@ -99,7 +99,7 @@
                         Foreground="#cdd6f4"
                         Padding="10,6" />
 
-                <Button Content="✕ Delete"
+                <Button Content="{conv:Localize profile.button_delete}"
                         Command="{Binding DeleteSelectedCommand}"
                         IsEnabled="{Binding SelectedProfile, Converter={StaticResource NullToBool}}"
                         HorizontalAlignment="Stretch"
@@ -115,7 +115,7 @@
                     HorizontalAlignment="Right"
                     Spacing="8"
                     Margin="0,16,0,0">
-            <Button Content="Close"
+            <Button Content="{conv:Localize button.close}"
                     Command="{Binding CancelCommand}"
                     CommandParameter="{Binding $parent[Window]}"
                     Background="#313244"

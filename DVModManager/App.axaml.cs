@@ -24,6 +24,14 @@ public class App : Application
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
 
+        // Initialize localization service with default language (English).
+        // If settings are loaded later, the language will be updated via MainWindowViewModel.
+        // For now, we just ensure the service is ready before any UI is created.
+        var localizationService = Services.GetRequiredService<ILocalizationService>();
+        // Expose as an Application-level resource so XAML can bind to it via {StaticResource Loc}
+        Resources["Loc"] = localizationService;
+        // Language will be applied after settings load in MainWindowViewModel.InitializeAsync()
+
         // Catch unhandled exceptions on any thread and surface them in the status bar / console
         var logDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -105,6 +113,9 @@ public class App : Application
 
         // HTTP
         services.AddHttpClient();
+
+        // Localization (must be registered early, before UI/ViewModels)
+        services.AddSingleton<ILocalizationService, LocalizationService>();
 
         // Core infrastructure
         services.AddSingleton<ISettingsService, SettingsService>();
