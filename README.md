@@ -98,6 +98,7 @@ Applying a profile can trigger:
 
 - Activations/deactivations
 - Version rollbacks (if required and available)
+- Download missing mods (if Repository is defined in `Info.json`)
 
 ## Updates
 
@@ -107,7 +108,7 @@ Applying a profile can trigger:
 
 Optional credentials in Settings:
 
-- GitHub token (to improve API rate limits)
+- GitHub token (to improve API rate limits. Only needed for mass downloading mods < 60/h)
 - Nexus API key
 
 ## Logging and Error Handling
