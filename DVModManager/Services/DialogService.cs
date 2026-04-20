@@ -158,9 +158,84 @@ public class DialogService : IDialogService
             Spacing = 16,
             Children =
             {
-                new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new ScrollViewer
+                {
+                    MaxHeight = 280,
+                    Content = new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap }
+                },
                 buttons
             }
         };
+    }
+
+    public async Task<bool> ShowFailedDownloadsAsync(string title, IReadOnlyList<(string ModId, string? HomePageUrl)> failedMods)
+    {
+        if (_owner == null) return false;
+
+        bool openNexus = false;
+        var tcs = new TaskCompletionSource<bool>();
+
+        var nexusBtn = new Button { Content = "Open on Nexus", Width = 130 };
+        var cancelBtn = new Button { Content = "Cancel", Width = 80 };
+
+        nexusBtn.Click += (_, _) => { openNexus = true; tcs.TrySetResult(true); };
+        cancelBtn.Click += (_, _) => { openNexus = false; tcs.TrySetResult(false); };
+
+        var buttons = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Spacing = 12,
+            Children = { nexusBtn, cancelBtn }
+        };
+
+        int nexusCount = failedMods.Count(m => !string.IsNullOrEmpty(m.HomePageUrl));
+        nexusBtn.Content = nexusCount > 0 ? $"Open on Nexus ({nexusCount})" : "Open on Nexus";
+        nexusBtn.Width = double.NaN; // auto-width to fit content
+
+        var lines = new System.Text.StringBuilder();
+        lines.AppendLine("The following mods could not be downloaded from GitHub:");
+        foreach (var (modId, homePageUrl) in failedMods)
+        {
+            bool hasLink = !string.IsNullOrEmpty(homePageUrl);
+            lines.AppendLine(hasLink ? $"  \u2022 {modId}" : $"  \u2022 {modId}  (no link available)");
+        }
+        if (nexusCount > 0)
+            lines.AppendLine($"\nClick \"Open on Nexus ({nexusCount})\" to open their pages in the browser.");
+        else
+            nexusBtn.IsEnabled = false;
+
+        var content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(20),
+            Spacing = 16,
+            Children =
+            {
+                new ScrollViewer
+                {
+                    MaxHeight = 280,
+                    Content = new TextBlock { Text = lines.ToString().TrimEnd(), TextWrapping = Avalonia.Media.TextWrapping.Wrap }
+                },
+                buttons
+            }
+        };
+
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 460,
+            MaxHeight = 600,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = content
+        };
+
+        dialog.Closing += (_, _) => tcs.TrySetResult(false);
+
+        _ = dialog.ShowDialog(_owner);
+        openNexus = await tcs.Task;
+        if (dialog.IsVisible) dialog.Close();
+        return openNexus;
     }
 }

@@ -369,6 +369,7 @@ public class ModInstallService : IModInstallService
             var downloadPath = Path.Combine(downloadDir, $"{Guid.NewGuid()}.zip");
 
             using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromSeconds(60);
             http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
             using var response = await http.GetAsync(
                 downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);

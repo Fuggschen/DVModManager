@@ -704,6 +704,7 @@ public partial class MainWindowViewModel : ViewModelBase
             if (confirmed)
             {
                 int downloaded = 0;
+                var failedEntries = new List<(string ModId, string? HomePageUrl)>();
                 SetBusy($"Downloading missing mods (0/{githubEntries.Count})...");
 
                 foreach (var entry in githubEntries)
@@ -717,25 +718,36 @@ public partial class MainWindowViewModel : ViewModelBase
                         Version = "0.0.0",
                         Repository = entry.RepositoryUrl!
                     };
-                    var updateInfo = await _updateService.CheckUpdateAsync(stub);
-                    if (updateInfo?.DownloadUrl != null)
+                    try
                     {
-                        BusyMessage = $"Downloading {entry.ModId} ({downloaded + 1}/{githubEntries.Count})...";
-                        var progress = new Progress<double>(p =>
-                            BusyMessage = $"Downloading {entry.ModId} {p:P0} ({downloaded + 1}/{githubEntries.Count})...");
-                        var result = await _modInstall.DownloadAndInstallFromUrlAsync(
-                            updateInfo.DownloadUrl, _settings.Settings.GamePath, _settings.Settings.StoragePath, progress);
-                        if (result != null) downloaded++;
-                        else StatusMessage = $"Download failed for {entry.ModId}.";
+                        using var resolveCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        var updateInfo = await _updateService.CheckUpdateAsync(stub, resolveCts.Token);
+                        if (updateInfo?.DownloadUrl != null)
+                        {
+                            BusyMessage = $"Downloading {entry.ModId} ({downloaded + 1}/{githubEntries.Count})...";
+                            var progress = new Progress<double>(p =>
+                                BusyMessage = $"Downloading {entry.ModId} {p:P0} ({downloaded + 1}/{githubEntries.Count})...");
+                            using var downloadCts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+                            var result = await _modInstall.DownloadAndInstallFromUrlAsync(
+                                updateInfo.DownloadUrl, _settings.Settings.GamePath, _settings.Settings.StoragePath,
+                                progress, downloadCts.Token);
+                            if (result != null) downloaded++;
+                            else failedEntries.Add((entry.ModId, entry.HomePageUrl));
+                        }
+                        else
+                        {
+                            failedEntries.Add((entry.ModId, entry.HomePageUrl));
+                        }
                     }
-                    else
+                    catch (OperationCanceledException)
                     {
-                        StatusMessage = $"Could not resolve download URL for {entry.ModId}.";
+                        failedEntries.Add((entry.ModId, entry.HomePageUrl));
                     }
                 }
 
+                // Collect nexus-only entries into the failed list so they appear in the dialog
                 foreach (var entry in nexusEntries)
-                    Helpers.PlatformHelper.Open(entry.HomePageUrl!);
+                    failedEntries.Add((entry.ModId, entry.HomePageUrl));
 
                 // Refresh so newly installed mods appear in the diff for activation
                 await RefreshModsAsync();
@@ -743,8 +755,17 @@ public partial class MainWindowViewModel : ViewModelBase
                 diff = _profileService.ComputeDiff(profile, allMods);
 
                 ClearBusy();
-                if (nexusEntries.Count > 0)
-                    StatusMessage = $"Downloaded {downloaded} mod(s). Nexus mods ({nexusEntries.Count}) opened in browser — install manually then re-apply.";
+                if (failedEntries.Count > 0)
+                {
+                    var openNexus = await _dialogService.ShowFailedDownloadsAsync(
+                        "Download Failed", failedEntries);
+                    if (openNexus)
+                    {
+                        foreach (var (_, homePageUrl) in failedEntries.Where(f => !string.IsNullOrEmpty(f.HomePageUrl)))
+                            Helpers.PlatformHelper.Open(homePageUrl!);
+                    }
+                    StatusMessage = $"Downloaded {downloaded} mod(s). {failedEntries.Count} could not be auto-downloaded.";
+                }
             }
         }
 
