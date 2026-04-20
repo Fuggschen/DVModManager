@@ -76,7 +76,8 @@ public class DialogService : IDialogService
         {
             Title = title,
             Width = 420,
-            Height = 180,
+            MaxHeight = 600,
+            SizeToContent = SizeToContent.Height,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Content = BuildMessageContent(message, null)
@@ -95,10 +96,10 @@ public class DialogService : IDialogService
         {
             Title = title,
             Width = 420,
-            Height = 180,
+            MaxHeight = 600,
+            SizeToContent = SizeToContent.Height,
             CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = BuildMessageContent(message, confirmed => { result = confirmed; })
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
 
         // We'll close the dialog from the button callbacks via a TaskCompletionSource
@@ -125,7 +126,11 @@ public class DialogService : IDialogService
             Spacing = 16,
             Children =
             {
-                new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new ScrollViewer
+                {
+                    MaxHeight = 280,
+                    Content = new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap }
+                },
                 btn
             }
         };
