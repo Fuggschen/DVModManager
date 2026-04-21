@@ -39,6 +39,7 @@ public partial class ModItemViewModel : ViewModelBase
     [ObservableProperty] private string _author = "";
     [ObservableProperty] private string _version = "";
     [ObservableProperty] private bool _isActive;
+    [ObservableProperty] private bool _isChecked;
     [ObservableProperty] private ModState _state;
     [ObservableProperty] private bool _hasUpdate;
     [ObservableProperty] private string? _updateVersion;

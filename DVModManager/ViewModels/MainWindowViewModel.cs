@@ -270,6 +270,25 @@ public partial class MainWindowViewModel : ViewModelBase
         ApplyGroupedFilters();
     }
 
+    public async Task AssignModsToGroupAsync(IEnumerable<string> modIds, string? groupId)
+    {
+        foreach (var modId in modIds)
+        {
+            foreach (var g in _settings.Settings.ModGroups)
+                g.ModIds.Remove(modId);
+
+            if (groupId != null)
+            {
+                var target = _settings.Settings.ModGroups.FirstOrDefault(g => g.Id == groupId);
+                if (target != null && !target.ModIds.Contains(modId))
+                    target.ModIds.Add(modId);
+            }
+        }
+
+        await _settings.SaveAsync();
+        ApplyGroupedFilters();
+    }
+
     public async Task RemoveMissingModFromGroupAsync(string modId)
     {
         foreach (var g in _settings.Settings.ModGroups)
@@ -329,6 +348,33 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task ActivateSelectedModAsync()
     {
         if (_settings.Settings.GamePath == null) return;
+
+        // Multiple mods checked — activate all checked available mods
+        var checkedTargets = AvailableMods.Where(m => m.IsChecked).ToList();
+        if (checkedTargets.Count >= 2)
+        {
+            SetBusy($"Activating {checkedTargets.Count} mod(s)...");
+            int activated = 0;
+            var missingDeps = new List<string>();
+            foreach (var target in checkedTargets)
+            {
+                var missing = await AutoActivateDependenciesAsync(target);
+                if (missing.Count > 0)
+                {
+                    target.State = ModState.MissingDependency;
+                    target.HasMissingDependency = true;
+                    missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
+                    continue;
+                }
+                var success = await _modInstall.ActivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+                if (success) { target.SyncFromModel(); MoveToActive(target); activated++; }
+            }
+            ClearBusy();
+            StatusMessage = missingDeps.Count > 0
+                ? $"Activated {activated}/{checkedTargets.Count} — missing deps: {string.Join("; ", missingDeps)}"
+                : $"Activated {activated}/{checkedTargets.Count} mod(s).";
+            return;
+        }
 
         // Group selected — activate all available mods in the group
         if (SelectedGroup != null)
@@ -396,6 +442,22 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task DeactivateSelectedModAsync()
     {
         if (_settings.Settings.GamePath == null) return;
+
+        // Multiple mods checked — deactivate all checked active mods
+        var checkedTargets = ActiveMods.Where(m => m.IsChecked).ToList();
+        if (checkedTargets.Count >= 2)
+        {
+            SetBusy($"Deactivating {checkedTargets.Count} mod(s)...");
+            int deactivated = 0;
+            foreach (var target in checkedTargets)
+            {
+                var success = await _modInstall.DeactivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+                if (success) { target.SyncFromModel(); MoveToInactive(target); deactivated++; }
+            }
+            ClearBusy();
+            StatusMessage = $"Deactivated {deactivated}/{checkedTargets.Count} mod(s).";
+            return;
+        }
 
         // Group selected — deactivate all active mods in the group
         if (SelectedGroup != null)
