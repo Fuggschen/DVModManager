@@ -10,6 +10,8 @@ public partial class ProfileViewModel : ViewModelBase
 {
     private readonly IProfileService _profileService;
     private readonly IDialogService _dialogService;
+    private readonly ISettingsService _settings;
+    private readonly ILocalizationService _loc;
     private string _profilesPath = "";
 
     [ObservableProperty] private ObservableCollection<ModProfile> _profiles = [];
@@ -21,10 +23,13 @@ public partial class ProfileViewModel : ViewModelBase
 
     public event EventHandler<string>? ProfileApplyRequested;
 
-    public ProfileViewModel(IProfileService profileService, IDialogService dialogService)
+    public ProfileViewModel(IProfileService profileService, IDialogService dialogService,
+        ISettingsService settings, ILocalizationService loc)
     {
         _profileService = profileService;
         _dialogService = dialogService;
+        _settings = settings;
+        _loc = loc;
     }
 
     public async Task LoadProfilesAsync(string profilesPath)
@@ -65,11 +70,35 @@ public partial class ProfileViewModel : ViewModelBase
     private async Task ExportSelectedAsync()
     {
         if (SelectedProfile == null) return;
-        var path = await _dialogService.SaveFileAsync("Export Profile",
-            "JSON Profile", ["json"], SelectedProfile.Name + ".json");
-        if (path == null) return;
 
-        await _profileService.ExportProfileAsync(SelectedProfile, path);
+        var exportTitle = _loc.GetString("export.choose_format.title");
+        var choice = await _dialogService.ShowExportOptionsAsync(exportTitle);
+
+        if (choice == ExportOption.Cancel) return;
+
+        if (choice == ExportOption.Json)
+        {
+            var path = await _dialogService.SaveFileAsync(exportTitle,
+                "JSON Profile", ["json"], SelectedProfile.Name + ".json");
+            if (path == null) return;
+            await _profileService.ExportProfileAsync(SelectedProfile, path);
+            return;
+        }
+
+        // ZIP
+        var confirmed = await _dialogService.ConfirmAsync(
+            _loc.GetString("export.zip_warning.title"),
+            _loc.GetString("export.zip_warning.message"));
+        if (!confirmed) return;
+
+        var gamePath = _settings.Settings.GamePath;
+        if (string.IsNullOrEmpty(gamePath)) return;
+
+        var zipPath = await _dialogService.SaveFileAsync(exportTitle,
+            "ZIP Modpack", ["zip"], SelectedProfile.Name + ".zip");
+        if (zipPath == null) return;
+
+        await _profileService.ExportProfileAsZipAsync(SelectedProfile, gamePath, zipPath);
     }
 
     [RelayCommand]

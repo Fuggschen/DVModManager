@@ -199,6 +199,67 @@ public class ModInstallService : IModInstallService
         }
     }
 
+    // ── Install from folder ─────────────────────────────────────────────────────────────
+
+    public async Task<ModInfo?> InstallFromFolderAsync(
+        string modFolderPath, string gamePath, string storagePath,
+        bool activate = false, CancellationToken ct = default)
+    {
+        try
+        {
+            var infoPath = Path.Combine(modFolderPath, "Info.json");
+            if (!File.Exists(infoPath))
+            {
+                _logger.LogError("No Info.json found in folder {Folder}", modFolderPath);
+                return null;
+            }
+
+            var json = await File.ReadAllTextAsync(infoPath, ct);
+            var modInfo = JsonSerializer.Deserialize<ModInfo>(json, JsonOptions);
+            if (modInfo == null) return null;
+
+            var targetDir = activate
+                ? Path.Combine(gamePath, "Mods",          modInfo.Id)
+                : Path.Combine(gamePath, "Mods.inactive", modInfo.Id);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
+
+            if (Directory.Exists(targetDir))
+            {
+                var existingInfoPath = Path.Combine(targetDir, "Info.json");
+                if (File.Exists(existingInfoPath))
+                {
+                    try
+                    {
+                        var existingMod = JsonSerializer.Deserialize<ModInfo>(
+                            await File.ReadAllTextAsync(existingInfoPath, ct), JsonOptions);
+                        if (existingMod != null)
+                        {
+                            existingMod.FolderPath = targetDir;
+                            await _versionCache.ArchiveCurrentVersionAsync(existingMod, storagePath);
+                        }
+                    }
+                    catch { /* archive failure is non-fatal */ }
+                }
+                Directory.Delete(targetDir, true);
+            }
+
+            await Task.Run(() => CopyDirectoryRecursive(modFolderPath, targetDir), ct);
+
+            modInfo.FolderPath = targetDir;
+            modInfo.IsActive   = activate;
+            modInfo.State      = activate ? ModState.Active : ModState.Inactive;
+
+            _logger.LogInformation("Installed mod {Id} v{Version} from folder", modInfo.Id, modInfo.Version);
+            return modInfo;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to install from folder {Folder}", modFolderPath);
+            return null;
+        }
+    }
+
     // ── Uninstall ─────────────────────────────────────────────────────────────
 
     public async Task<bool> UninstallModAsync(ModInfo mod, string gamePath, string storagePath, bool hardDelete = false, CancellationToken ct = default)
@@ -369,6 +430,7 @@ public class ModInstallService : IModInstallService
             var downloadPath = Path.Combine(downloadDir, $"{Guid.NewGuid()}.zip");
 
             using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromSeconds(60);
             http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
             using var response = await http.GetAsync(
                 downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);

@@ -10,10 +10,9 @@ public interface IProfileService
     Task DeleteProfileAsync(string name, string profilesPath);
     Task<string> ExportProfileAsync(ModProfile profile, string destinationFilePath);
     Task<ModProfile> ImportProfileAsync(string sourceFilePath);
-
-    /// <summary>
-    /// Returns a list describing what operations would occur if the profile were applied.
-    /// </summary>
+    Task<string> ExportProfileAsZipAsync(ModProfile profile, string gamePath, string zipPath);
+    /// <summary>Returns a profile name that doesn't collide with existing files, appending (2), (3) etc. as needed.</summary>
+    Task<string> GetUniqueProfileNameAsync(string name, string profilesPath);
     ProfileDiff ComputeDiff(ModProfile profile, IReadOnlyList<ModInfo> currentMods);
 }
 

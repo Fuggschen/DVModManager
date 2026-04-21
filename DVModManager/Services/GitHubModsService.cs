@@ -101,6 +101,7 @@ public class GitHubModsService : IGitHubModsService
         try
         {
             using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromSeconds(15);
             http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
             var json = await http.GetStringAsync(mod.Repository, ct);
             using var doc = System.Text.Json.JsonDocument.Parse(json);
@@ -150,30 +151,39 @@ public class GitHubModsService : IGitHubModsService
         string downloadUrl, string destinationPath,
         IProgress<double>? progress = null, CancellationToken ct = default)
     {
-        // GitHub release asset downloads are plain HTTPS — use HttpClient
-        using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
-
-        using var response = await http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-
-        var totalBytes = response.Content.Headers.ContentLength;
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        await using var file = File.Create(destinationPath);
-
-        var buffer = new byte[81920];
-        long downloaded = 0;
-        int read;
-
-        while ((read = await stream.ReadAsync(buffer, ct)) > 0)
+        try
         {
-            await file.WriteAsync(buffer.AsMemory(0, read), ct);
-            downloaded += read;
-            if (totalBytes.HasValue)
-                progress?.Report((double)downloaded / totalBytes.Value);
-        }
+            // GitHub release asset downloads are plain HTTPS — use HttpClient
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromSeconds(60);
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
 
-        return destinationPath;
+            using var response = await http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            response.EnsureSuccessStatusCode();
+
+            var totalBytes = response.Content.Headers.ContentLength;
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            await using var file = File.Create(destinationPath);
+
+            var buffer = new byte[81920];
+            long downloaded = 0;
+            int read;
+
+            while ((read = await stream.ReadAsync(buffer, ct)) > 0)
+            {
+                await file.WriteAsync(buffer.AsMemory(0, read), ct);
+                downloaded += read;
+                if (totalBytes.HasValue)
+                    progress?.Report((double)downloaded / totalBytes.Value);
+            }
+
+            return destinationPath;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error downloading release asset from {Url}", downloadUrl);
+            throw;
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

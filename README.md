@@ -12,6 +12,9 @@ DV Mod Manager scans your `Mods` and `Mods.inactive` folders, lets you quickly a
 - Install mods from `.zip` archives (expects `Info.json`).
 - Create and manage custom mod groups in the Available and Active lists.
 - One-click activate/deactivate for single mods or grouped mods.
+- Multi-select mods with checkboxes or CTRL+click; activate/deactivate all checked mods at once.
+- Click a group header to select all mods in that group; CTRL+click to append/toggle.
+- Drag one or multiple selected mods between groups.
 - Automatically activates inactive required dependencies when enabling a mod (when available locally).
 - Update checks via:
   - GitHub releases (if defined in the `Info.json`).
@@ -19,7 +22,7 @@ DV Mod Manager scans your `Mods` and `Mods.inactive` folders, lets you quickly a
 - Bulk update for downloadable GitHub updates.
 - Version archive cache with rollback support.
 - Profile system to save/apply mod states.
-- Import/export profiles as JSON.
+- Import/export profiles as JSON or as self-contained ZIP modpacks.
 - Optional automatic backup before bulk changes.
 - Safety lock while Derail Valley is running.
 
@@ -92,12 +95,19 @@ You can:
 - Save current setup as a profile
 - Apply a saved profile
 - Import/export profiles as JSON
+- Export a profile as a self-contained ZIP modpack (bundles all mod files alongside the profile)
+- Import a modpack ZIP via the **Install** button — the app shows the full mod list and a security warning before importing; profile names are deduplicated automatically
 - Delete profiles you no longer need
 
 Applying a profile can trigger:
 
 - Activations/deactivations
 - Version rollbacks (if required and available)
+- Download missing mods (if Repository is defined in `Info.json`)
+
+> **Redistribution note:** When exporting a ZIP modpack the app reminds you that most mods do not permit redistribution on third-party sites. Share modpack ZIPs only within the limits of each mod's licence.
+
+> **Security note:** ZIP modpacks contain the actual mod binaries. Only import modpacks from sources you trust.
 
 ## Updates
 
@@ -107,7 +117,7 @@ Applying a profile can trigger:
 
 Optional credentials in Settings:
 
-- GitHub token (to improve API rate limits)
+- GitHub token (to improve API rate limits. Only needed for mass downloading mods < 60/h)
 - Nexus API key
 
 ## Logging and Error Handling

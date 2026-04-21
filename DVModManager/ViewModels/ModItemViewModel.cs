@@ -1,17 +1,32 @@
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DVModManager.Models;
+using DVModManager.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DVModManager.ViewModels;
 
 public partial class ModItemViewModel : ViewModelBase
 {
     private readonly ModInfo _modInfo;
+    private readonly ILocalizationService? _localization;
 
     /// <summary>Normal constructor from a scanned ModInfo.</summary>
     public ModItemViewModel(ModInfo modInfo)
     {
         _modInfo = modInfo;
+
+        try
+        {
+            _localization = App.Services.GetService(typeof(ILocalizationService)) as ILocalizationService;
+            if (_localization != null)
+                _localization.LanguageChanged += (_, _) => OnPropertyChanged(nameof(StatusLabel));
+        }
+        catch
+        {
+            _localization = null;
+        }
+
         SyncFromModel();
     }
 
@@ -24,6 +39,7 @@ public partial class ModItemViewModel : ViewModelBase
     [ObservableProperty] private string _author = "";
     [ObservableProperty] private string _version = "";
     [ObservableProperty] private bool _isActive;
+    [ObservableProperty] private bool _isChecked;
     [ObservableProperty] private ModState _state;
     [ObservableProperty] private bool _hasUpdate;
     [ObservableProperty] private string? _updateVersion;
@@ -45,14 +61,26 @@ public partial class ModItemViewModel : ViewModelBase
 
     public ModInfo ModInfo => _modInfo;
 
+    private string LocalizeStatus(string key, string fallback, params object?[] args)
+    {
+        if (_localization == null)
+            return args.Length == 0 ? fallback : string.Format(fallback, args);
+
+        var localized = _localization.GetString(key, args);
+        if (localized == key)
+            return args.Length == 0 ? fallback : string.Format(fallback, args);
+
+        return localized;
+    }
+
     public string StatusLabel => State switch
     {
-        ModState.UpdateAvailable  => $"Update available \u2192 {UpdateVersion}",
-        ModState.MissingDependency => "Missing dependency",
-        ModState.NoMetadata       => "No metadata",
-        ModState.Missing          => "Missing \u2014 not found on disk",
-        ModState.Active           => "Active",
-        _                         => "Inactive"
+        ModState.UpdateAvailable   => LocalizeStatus("modstate.update_available", "Update available → {0}", UpdateVersion),
+        ModState.MissingDependency => LocalizeStatus("modstate.missing_dependency", "Missing dependency"),
+        ModState.NoMetadata        => LocalizeStatus("modstate.no_metadata", "No metadata"),
+        ModState.Missing           => LocalizeStatus("modstate.missing", "Missing — not found on disk"),
+        ModState.Active            => LocalizeStatus("modstate.active", "Active"),
+        _                          => LocalizeStatus("modstate.inactive", "Inactive")
     };
 
     public IBrush StatusBrush => State switch

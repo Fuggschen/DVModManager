@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using DVModManager.Models;
 
@@ -66,6 +67,55 @@ public class ProfileService : IProfileService
         var json = await File.ReadAllTextAsync(sourceFilePath);
         return JsonSerializer.Deserialize<ModProfile>(json, JsonOptions)
             ?? throw new InvalidDataException("File is not a valid profile.");
+    }
+
+    public async Task<string> ExportProfileAsZipAsync(ModProfile profile, string gamePath, string zipPath)
+    {
+        await Task.Run(() =>
+        {
+            using var archive = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create);
+
+            // Add profile.json at root
+            var profileEntry = archive.CreateEntry("profile.json");
+            using (var entryStream = profileEntry.Open())
+            {
+                var json = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(profile, JsonOptions);
+                entryStream.Write(json, 0, json.Length);
+            }
+
+            // Add mod files under mods/<ModId>/
+            foreach (var mod in profile.Mods)
+            {
+                var activePath   = Path.Combine(gamePath, "Mods",          mod.ModId);
+                var inactivePath = Path.Combine(gamePath, "Mods.inactive", mod.ModId);
+                var modFolder    = Directory.Exists(activePath)   ? activePath
+                                 : Directory.Exists(inactivePath) ? inactivePath
+                                 : null;
+                if (modFolder == null) continue;
+
+                foreach (var file in Directory.EnumerateFiles(modFolder, "*", SearchOption.AllDirectories))
+                {
+                    var relative = Path.GetRelativePath(modFolder, file)
+                                       .Replace('\\', '/');
+                    var entryName = $"mods/{mod.ModId}/{relative}";
+                    archive.CreateEntryFromFile(file, entryName,
+                        System.IO.Compression.CompressionLevel.Fastest);
+                }
+            }
+        });
+        return zipPath;
+    }
+
+    public Task<string> GetUniqueProfileNameAsync(string name, string profilesPath)
+    {
+        var safeName = string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        var candidate = safeName;
+        var counter = 2;
+        while (File.Exists(Path.Combine(profilesPath, candidate + ".json")))
+        {
+            candidate = $"{safeName} ({counter++})";
+        }
+        return Task.FromResult(candidate);
     }
 
     public ProfileDiff ComputeDiff(ModProfile profile, IReadOnlyList<ModInfo> currentMods)

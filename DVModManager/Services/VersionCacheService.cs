@@ -32,7 +32,7 @@ public class VersionCacheService : IVersionCacheService
                 ModId = mod.Id,
                 Version = mod.Version,
                 ArchivePath = archivePath,
-                Source = "cached",
+                Source = "modversion.source.cached",
                 ArchivedAt = DateTime.UtcNow,
                 ArchiveSizeBytes = new FileInfo(archivePath).Length
             });

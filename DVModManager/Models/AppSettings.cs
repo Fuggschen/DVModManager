@@ -15,6 +15,9 @@ public class AppSettings
     /// <summary>"Dark" or "Light"</summary>
     public string ThemeVariant { get; set; } = "Dark";
 
+    /// <summary>Language code: "en", "de", "fr", etc.</summary>
+    public string Language { get; set; } = "en";
+
     public bool AutoCheckUpdatesOnStartup { get; set; } = true;
 
     public bool BackupBeforeChanges { get; set; } = true;
