@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows]
+
+    env:
+      ReferencePath: 'C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Restore
+        run: dotnet restore CustomDemonstrators.sln
+
+      - name: Lint
+        run: dotnet format CustomDemonstrators.sln --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build CustomDemonstrators.sln -c Release --no-restore
