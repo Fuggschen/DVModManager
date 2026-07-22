@@ -12,6 +12,27 @@
 		<Reference Include="Assembly-CSharp">
 			<HintPath>$(ReferencePath)Assembly-CSharp.dll</HintPath>
 		</Reference>
+		<Reference Include="DV.UI">
+			<HintPath>$(ReferencePath)DV.UI.dll</HintPath>
+		</Reference>
+		<Reference Include="DV.UIFramework">
+			<HintPath>$(ReferencePath)DV.UIFramework.dll</HintPath>
+		</Reference>
+		<Reference Include="DV.Common">
+			<HintPath>$(ReferencePath)DV.Common.dll</HintPath>
+		</Reference>
+		<Reference Include="DV.Utils">
+			<HintPath>$(ReferencePath)DV.Utils.dll</HintPath>
+		</Reference>
+		<Reference Include="Newtonsoft.Json">
+			<HintPath>$(ReferencePath)Newtonsoft.Json.dll</HintPath>
+		</Reference>
+		<Reference Include="I2.Localization">
+			<HintPath>$(ReferencePath)I2.Localization.dll</HintPath>
+		</Reference>
+		<Reference Include="Facepunch.Steamworks.Win64">
+			<HintPath>$(ReferencePath)Facepunch.Steamworks.Win64.dll</HintPath>
+		</Reference>
 	</ItemGroup>
 
 	<!-- Unity -->
@@ -24,6 +45,15 @@
 		</Reference>
 		<Reference Include="UnityEngine.IMGUIModule">
 			<HintPath>$(ReferencePath)UnityEngine.IMGUIModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.UIModule">
+			<HintPath>$(ReferencePath)UnityEngine.UIModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.UI">
+			<HintPath>$(ReferencePath)UnityEngine.UI.dll</HintPath>
+		</Reference>
+		<Reference Include="Unity.TextMeshPro">
+			<HintPath>$(ReferencePath)Unity.TextMeshPro.dll</HintPath>
 		</Reference>
 	</ItemGroup>
 
