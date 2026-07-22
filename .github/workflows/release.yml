@@ -31,9 +31,9 @@ jobs:
           Write-Host "Releasing version $version"
 
       - name: Build and package
-        run: dotnet build CustomDemonstrators.sln -c Release
+        run: dotnet build ModProfiles.sln -c Release
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create ${{ github.ref_name }} dist/CustomDemonstrators.zip --title ${{ github.ref_name }} --generate-notes
+        run: gh release create ${{ github.ref_name }} dist/ModProfiles.zip --title ${{ github.ref_name }} --generate-notes
