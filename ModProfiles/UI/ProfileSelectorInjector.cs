@@ -215,18 +215,22 @@ internal static class ProfileSelectorInjector
                 return;
             }
 
+            string prompt = GameRestarter.CanAutoRestart
+                ? "Restart now to apply?"
+                : "Auto-restart isn't available under Proton. Quit now and relaunch from Steam?";
+
             var keys = new PopupLocalizationKeys
             {
                 labelKey = $"Profile '{profile.Name}' needs to turn off mod(s) that can't be unloaded while " +
-                           $"the game is running: {names}. Restart now to apply?",
-                positiveKey = "Restart",
+                           $"the game is running: {names}. {prompt}",
+                positiveKey = GameRestarter.CanAutoRestart ? "Restart" : "Quit",
                 negativeKey = "Cancel",
             };
 
             OnPositive(pm, prefab, keys, () =>
             {
                 ProfileApplier.Apply(profile);
-                RestartViaSteam();
+                GameRestarter.RestartOrQuit();
             });
         }
         catch (Exception ex)
@@ -267,20 +271,4 @@ internal static class ProfileSelectorInjector
         }
     }
 
-    private const uint APP_ID = 588030;
-
-    private static void RestartViaSteam()
-    {
-        try
-        {
-            Application.OpenURL($"steam://rungameid/{APP_ID}");
-        }
-        catch (Exception ex)
-        {
-            Main.Logger.LogException("Failed to request Steam relaunch", ex);
-        }
-
-        Main.Logger.Log("Quitting to apply mod enable/disable changes");
-        Application.Quit();
-    }
 }
