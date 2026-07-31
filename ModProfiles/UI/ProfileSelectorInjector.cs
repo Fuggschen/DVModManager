@@ -83,7 +83,7 @@ internal static class ProfileSelectorInjector
             return true;
         }
 
-        string? profileName = SaveAssociations.Get(controller.CurrentThing.SessionID);
+        string? profileName = SaveAssociations.Get(controller.CurrentThing);
         if (profileName == null)
         {
             return true;
@@ -93,6 +93,7 @@ internal static class ProfileSelectorInjector
         if (profile == null)
         {
             Main.Logger.Warning($"Session is associated with profile '{profileName}' but it no longer exists");
+            SaveAssociations.Set(controller.CurrentThing, null);
             return true;
         }
 

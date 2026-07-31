@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using DV.Common;
 using DV.UI;
 using DV.UI.PresetEditors;
 using DV.UIFramework;
@@ -136,7 +137,7 @@ public class ProfileSelectorWidget : MonoBehaviour
 
         RebuildOptions();
 
-        string? associated = CurrentSessionId is int id ? SaveAssociations.Get(id) : null;
+        string? associated = SaveAssociations.Get(CurrentSession);
         int index = associated == null ? 0 : Mathf.Max(0, options.IndexOf(associated));
 
         suppressEvents = true;
@@ -152,9 +153,7 @@ public class ProfileSelectorWidget : MonoBehaviour
         options.AddRange(ProfileStore.ListProfileNames());
     }
 
-    private int? CurrentSessionId => controller != null && controller.CurrentThing != null
-        ? controller.CurrentThing.SessionID
-        : null;
+    private IGameSession? CurrentSession => controller != null ? controller.CurrentThing : null;
 
     private string? SelectedProfileName =>
         profileSelector.SelectedIndex > 0 && profileSelector.SelectedIndex < options.Count
@@ -163,7 +162,7 @@ public class ProfileSelectorWidget : MonoBehaviour
 
     private void OnProfileSelectionChanged(IClickable _, int selectedIndex)
     {
-        if (suppressEvents || CurrentSessionId is not int id)
+        if (suppressEvents || CurrentSession is not IGameSession session)
         {
             return;
         }
@@ -171,8 +170,8 @@ public class ProfileSelectorWidget : MonoBehaviour
         string? profileName = selectedIndex <= 0 || selectedIndex >= options.Count
             ? null
             : options[selectedIndex];
-        SaveAssociations.Set(id, profileName);
-        Main.Logger.Log($"Session {id} associated with profile '{profileName ?? NONE_OPTION}'");
+        SaveAssociations.Set(session, profileName);
+        Main.Logger.Log($"Session '{session.Name}' associated with profile '{profileName ?? NONE_OPTION}'");
     }
 
     private void OnConfigureClicked()
@@ -238,10 +237,7 @@ public class ProfileSelectorWidget : MonoBehaviour
             }
 
             ProfileStore.Capture(name);
-            if (CurrentSessionId is int id)
-            {
-                SaveAssociations.Set(id, name);
-            }
+            SaveAssociations.Set(CurrentSession, name);
 
             Refresh();
         };
@@ -269,7 +265,14 @@ public class ProfileSelectorWidget : MonoBehaviour
             }
 
             ProfileStore.Delete(name);
-            SaveAssociations.ForgetProfile(name);
+
+            // Other sessions still pointing at this profile clear themselves the next time they're
+            // loaded; this one is in front of us, so unbind it now.
+            if (SaveAssociations.Get(CurrentSession) == name)
+            {
+                SaveAssociations.Set(CurrentSession, null);
+            }
+
             Refresh();
         };
     }
