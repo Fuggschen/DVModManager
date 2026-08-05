@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
+using DVModManager.Helpers;
 using DVModManager.Models;
 using Microsoft.Extensions.Logging;
 
@@ -134,7 +135,13 @@ public class ModInstallService : IModInstallService
                 return null;
             }
 
-            var infoPath = Path.Combine(modRoot, "Info.json");
+            var infoPath = InfoJsonLocator.Locate(modRoot);
+            if (infoPath == null)
+            {
+                Directory.Delete(tempDir, true);
+                _logger.LogError("No Info.json found in archive {Archive}", archivePath);
+                return null;
+            }
             var json = await File.ReadAllTextAsync(infoPath, ct);
             var modInfo = JsonSerializer.Deserialize<ModInfo>(json, JsonOptions);
             if (modInfo == null) { Directory.Delete(tempDir, true); return null; }
@@ -155,8 +162,8 @@ public class ModInstallService : IModInstallService
                     FolderPath = targetDir
                 };
                 // Re-read the existing Info.json if available to get accurate version
-                var existingInfo = Path.Combine(targetDir, "Info.json");
-                if (File.Exists(existingInfo))
+                var existingInfo = InfoJsonLocator.Locate(targetDir);
+                if (existingInfo != null)
                 {
                     try
                     {
@@ -207,8 +214,8 @@ public class ModInstallService : IModInstallService
     {
         try
         {
-            var infoPath = Path.Combine(modFolderPath, "Info.json");
-            if (!File.Exists(infoPath))
+            var infoPath = InfoJsonLocator.Locate(modFolderPath);
+            if (infoPath == null)
             {
                 _logger.LogError("No Info.json found in folder {Folder}", modFolderPath);
                 return null;
@@ -226,8 +233,8 @@ public class ModInstallService : IModInstallService
 
             if (Directory.Exists(targetDir))
             {
-                var existingInfoPath = Path.Combine(targetDir, "Info.json");
-                if (File.Exists(existingInfoPath))
+                var existingInfoPath = InfoJsonLocator.Locate(targetDir);
+                if (existingInfoPath != null)
                 {
                     try
                     {
@@ -313,8 +320,8 @@ public class ModInstallService : IModInstallService
             if (Directory.Exists(currentPath))
             {
                 // Get current version from Info.json
-                var infoPath = Path.Combine(currentPath, "Info.json");
-                if (File.Exists(infoPath))
+                var infoPath = InfoJsonLocator.Locate(currentPath);
+                if (infoPath != null)
                 {
                     var currentMod = JsonSerializer.Deserialize<ModInfo>(
                         await File.ReadAllTextAsync(infoPath, ct), JsonOptions);
@@ -515,12 +522,12 @@ public class ModInstallService : IModInstallService
     private static string? FindModRoot(string extractedDir)
     {
         // Check if Info.json is directly in the extracted root
-        if (File.Exists(Path.Combine(extractedDir, "Info.json"))) return extractedDir;
+        if (InfoJsonLocator.Locate(extractedDir) != null) return extractedDir;
 
         // Check one level deep (common pattern: archive contains a single mod folder)
         foreach (var subDir in Directory.GetDirectories(extractedDir))
         {
-            if (File.Exists(Path.Combine(subDir, "Info.json"))) return subDir;
+            if (InfoJsonLocator.Locate(subDir) != null) return subDir;
         }
         return null;
     }
