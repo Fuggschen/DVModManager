@@ -12,7 +12,7 @@ if (!(Test-Path $ModInstallDir)) {
 	throw "Mod install dir not found: $ModInstallDir. Install the mod once (or check ReferencePath in Directory.Build.targets)."
 }
 
-dotnet build -c Debug "ModProfiles/ModProfiles.csproj"
+dotnet build -c Debug "DVModProfiles.csproj"
 if ($LASTEXITCODE -ne 0) { throw "Build failed." }
 
 Copy-Item -Force -Path "build/$modId.dll" -Destination $ModInstallDir

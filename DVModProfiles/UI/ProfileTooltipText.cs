@@ -1,6 +1,6 @@
 using DV.UI;
 
-namespace ModProfiles.UI;
+namespace DVModProfiles.UI;
 
 public class ProfileTooltipText : UIElementTooltipCustomText
 {

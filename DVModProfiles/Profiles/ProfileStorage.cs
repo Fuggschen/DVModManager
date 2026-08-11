@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using Steamworks;
 
-namespace ModProfiles.Profiles;
+namespace DVModProfiles.Profiles;
 
 // Persistence backend for profiles and associations. Keys are unix-style paths.
 public interface IStorageBackend
@@ -161,7 +161,7 @@ public sealed class LocalBackend : IStorageBackend
 // so they don't collide with any cloud files the game itself writes.
 public sealed class CloudBackend : IStorageBackend
 {
-    private const string NS = "modprofiles/";
+    private const string NS = "dvmodprofiles/";
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     public bool TryRead(string key, out string text)

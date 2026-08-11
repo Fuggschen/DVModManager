@@ -6,11 +6,11 @@ using DV.UI;
 using DV.UI.PresetEditors;
 using DV.UIFramework;
 using HarmonyLib;
-using ModProfiles.Profiles;
+using DVModProfiles.Profiles;
 using UnityEngine;
 using UnityModManagerNet;
 
-namespace ModProfiles.UI;
+namespace DVModProfiles.UI;
 
 // Harmony patches that graft the mod-profile UI onto the game's load menu and apply the
 // associated profile when a session is loaded / continued / started.

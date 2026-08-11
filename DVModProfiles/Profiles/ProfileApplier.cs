@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Xml.Serialization;
 using UnityModManagerNet;
 
-namespace ModProfiles.Profiles;
+namespace DVModProfiles.Profiles;
 
 public static class ProfileApplier
 {

@@ -1,11 +1,11 @@
 using System;
 using System.Reflection;
 using HarmonyLib;
-using ModProfiles.Profiles;
+using DVModProfiles.Profiles;
 using UnityEngine;
 using UnityModManagerNet;
 
-namespace ModProfiles;
+namespace DVModProfiles;
 
 public static class Main
 {

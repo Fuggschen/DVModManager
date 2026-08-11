@@ -4,7 +4,7 @@ using DV.Common;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace ModProfiles.Profiles;
+namespace DVModProfiles.Profiles;
 
 // Remembers which profile a save session is bound to.
 //
@@ -19,7 +19,7 @@ namespace ModProfiles.Profiles;
 public static class SaveAssociations
 {
     private const string LEGACY_FILENAME = "associations.json";
-    private const string GAME_DATA_KEY = "ModProfiles.Profile";
+    private const string GAME_DATA_KEY = "DVModProfiles.Profile";
 
     private static Dictionary<int, string>? legacyMap;
 

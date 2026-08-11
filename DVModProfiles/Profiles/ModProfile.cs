@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ModProfiles.Profiles;
+namespace DVModProfiles.Profiles;
 
 public class ModProfile
 {

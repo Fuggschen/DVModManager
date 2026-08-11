@@ -1,6 +1,6 @@
 using UnityModManagerNet;
 
-namespace ModProfiles;
+namespace DVModProfiles;
 
 public class Settings : UnityModManager.ModSettings
 {

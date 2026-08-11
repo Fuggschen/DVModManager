@@ -4,11 +4,11 @@ using DV.Common;
 using DV.UI;
 using DV.UI.PresetEditors;
 using DV.UIFramework;
-using ModProfiles.Profiles;
+using DVModProfiles.Profiles;
 using TMPro;
 using UnityEngine;
 
-namespace ModProfiles.UI;
+namespace DVModProfiles.UI;
 
 public class ProfileSelectorWidget : MonoBehaviour
 {

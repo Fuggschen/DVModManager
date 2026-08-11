@@ -3,8 +3,14 @@ name: Build Check
 on:
   push:
     branches: [dev]
+    paths-ignore:
+      - 'DVModProfiles/**'
+      - '**/*.md'
   pull_request:
     branches: [dev]
+    paths-ignore:
+      - 'DVModProfiles/**'
+      - '**/*.md'
 
 jobs:
   check:

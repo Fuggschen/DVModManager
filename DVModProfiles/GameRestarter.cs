@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace ModProfiles;
+namespace DVModProfiles;
 
 // Restarts the game to apply mod changes. A detached watchdog process waits for the game to exit
 // so Steam sees it as stopped before the relaunch request. On Windows the watchdog is PowerShell,

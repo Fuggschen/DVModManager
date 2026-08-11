@@ -5,9 +5,9 @@ using System.Linq;
 using Newtonsoft.Json;
 using UnityModManagerNet;
 
-namespace ModProfiles.Profiles;
+namespace DVModProfiles.Profiles;
 
-// Loads/saves ModProfiles as JSON through ProfileStorage (local files or Steam Cloud), and
+// Loads/saves ModProfile objects as JSON through ProfileStorage (local files or Steam Cloud), and
 // captures the current configuration of all installed mods into a profile.
 public static class ProfileStore
 {

@@ -1,9 +1,0 @@
-{
-	"Id": "ModProfiles",
-	"Version": "1.0.0",
-	"DisplayName": "Mod Profiles",
-	"Author": "SharkBaitDLS",
-	"EntryMethod": "ModProfiles.Main.Load",
-	"ManagerVersion": "0.27.2",
-	"Repository": "https://raw.githubusercontent.com/SharkBaitDLS/dv-mod-profiles/main/repository.json"
-}

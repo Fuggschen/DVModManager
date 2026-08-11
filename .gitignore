@@ -3,6 +3,11 @@
 [Oo]bj/
 publish/
 
+## DVModProfiles compilation artifacts
+DVModProfiles/build/
+DVModProfiles/dist/
+Directory.Build.targets
+
 ## User-specific files
 *.user
 *.suo
