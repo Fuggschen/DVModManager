@@ -698,6 +698,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (success)
         {
+            // Clear the pending update before refresh so the badge doesn't persist
+            SelectedMod.ModInfo.PendingUpdate = null;
             await RefreshModsAsync();
             StatusMessage = _localization.GetString("status.updated", displayName, update.LatestVersion);
         }
@@ -742,7 +744,11 @@ public partial class MainWindowViewModel : ViewModelBase
                 BusyMessage = $"Updating {modName}… {p:P0} ({updated + 1}/{modsWithUpdates.Count})");
             var success = await _modInstall.UpdateModAsync(
                 mod.ModInfo, mod.ModInfo.PendingUpdate!, _settings.Settings.GamePath!, _settings.Settings.StoragePath, progress);
-            if (success) updated++;
+            if (success)
+            {
+                mod.ModInfo.PendingUpdate = null;
+                updated++;
+            }
         }
 
         ClearBusy();
@@ -1203,7 +1209,8 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 var vm = new ModItemViewModel(mod);
                 // Re-apply any update badge that was set before the refresh
-                if (pendingUpdates.TryGetValue(vm.Id, out var pending))
+                if (pendingUpdates.TryGetValue(vm.Id, out var pending)
+                    && vm.Version != pending.LatestVersion)
                     vm.ApplyUpdate(pending);
                 if (mod.IsActive) ActiveMods.Add(vm);
                 else AvailableMods.Add(vm);
