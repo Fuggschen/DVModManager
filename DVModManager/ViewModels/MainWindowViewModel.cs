@@ -647,6 +647,16 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    // ── Start Game ────────────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private Task StartGameAsync()
+    {
+        Helpers.PlatformHelper.Open("steam://rungameid/588030");
+        StatusMessage = _localization.GetString("status.game_starting");
+        return Task.CompletedTask;
+    }
+
     // ── Updates ───────────────────────────────────────────────────────────────
 
     [RelayCommand]
