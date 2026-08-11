@@ -652,7 +652,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private Task StartGameAsync()
     {
-        Helpers.PlatformHelper.Open("steam://rungameid/588030");
+        Helpers.PlatformHelper.Open("steam://launch/588030/dialog");
         StatusMessage = _localization.GetString("status.game_starting");
         return Task.CompletedTask;
     }
