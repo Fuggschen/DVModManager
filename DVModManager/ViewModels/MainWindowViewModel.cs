@@ -824,7 +824,8 @@ public partial class MainWindowViewModel : ViewModelBase
         var diff = _profileService.ComputeDiff(profile, allMods);
 
         bool hasWork = diff.ToActivate.Count > 0 || diff.ToDeactivate.Count > 0
-                    || diff.ToRollback.Count > 0 || diff.ToDownload.Count > 0;
+                    || diff.ToRollback.Count > 0 || diff.ToDownload.Count > 0
+                    || diff.ToRedownload.Count > 0;
 
         if (!hasWork)
         {
@@ -918,6 +919,138 @@ public partial class MainWindowViewModel : ViewModelBase
                             Helpers.PlatformHelper.Open(homePageUrl!);
                     }
                     StatusMessage = $"Downloaded {downloaded} mod(s). {failedEntries.Count} could not be auto-downloaded.";
+                }
+            }
+        }
+
+        // ── Handle mods that need re-downloading to the correct version ──────
+        if (diff.ToRedownload.Count > 0)
+        {
+            var reDownloadEntries = diff.ToRedownload
+                .Where(e => !string.IsNullOrEmpty(e.RepositoryUrl)).ToList();
+
+            // Separate entries: those with the target version already in the cache
+            // vs those that need downloading from the repository.
+            var cachedEntries = new List<ProfileModEntry>();
+            var downloadEntries = new List<ProfileModEntry>();
+            foreach (var entry in reDownloadEntries)
+            {
+                var cachedPath = await _versionCache.GetVersionArchivePathAsync(
+                    entry.ModId, entry.Version, _settings.Settings.StoragePath);
+                if (cachedPath != null)
+                    cachedEntries.Add(entry);
+                else
+                    downloadEntries.Add(entry);
+            }
+
+            var reLines = new List<string>();
+            if (cachedEntries.Count > 0)
+            {
+                reLines.Add(_localization.GetString("dialog.redownload_will_rollback", cachedEntries.Count));
+                reLines.AddRange(cachedEntries.Select(e => _localization.GetString("dialog.redownload_entry", e.ModId, e.Version)));
+            }
+            if (downloadEntries.Count > 0)
+            {
+                reLines.Add(_localization.GetString("dialog.redownload_will_download", downloadEntries.Count));
+                reLines.AddRange(downloadEntries.Select(e => _localization.GetString("dialog.redownload_entry", e.ModId, e.Version)));
+            }
+
+            var reConfirmed = await _dialogService.ConfirmAsync(
+                _localization.GetString("dialog.redownload_title"),
+                string.Join("\n", reLines) + "\n\n" + _localization.GetString("dialog.redownload_proceed"));
+
+            if (reConfirmed)
+            {
+                int reDone = 0;
+                var reFailedEntries = new List<(string ModId, string? HomePageUrl)>();
+                int totalCount = cachedEntries.Count + downloadEntries.Count;
+
+                // Phase 1: Rollback cached versions
+                if (cachedEntries.Count > 0)
+                {
+                    SetBusy(_localization.GetString("busy.rolling_back_cache", 0, cachedEntries.Count));
+                    foreach (var entry in cachedEntries)
+                    {
+                        BusyMessage = _localization.GetString("status.rolling_back", entry.ModId, entry.Version);
+                        var ok = await _modInstall.RollbackToVersionAsync(
+                            entry.ModId, entry.Version,
+                            _settings.Settings.GamePath, _settings.Settings.StoragePath);
+                        if (ok) reDone++;
+                        else reFailedEntries.Add((entry.ModId, entry.HomePageUrl));
+                    }
+                }
+
+                // Phase 2: Download and apply versions not in cache
+                if (downloadEntries.Count > 0)
+                {
+                    SetBusy(_localization.GetString("busy.downloading_correct", 0, downloadEntries.Count));
+                    foreach (var entry in downloadEntries)
+                    {
+                        BusyMessage = _localization.GetString("busy.resolving_mod", entry.ModId) + $" ({reDone + 1}/{totalCount})";
+                        // Build a stub ModInfo so we can resolve the download URL via the update service
+                        var stub = new ModInfo
+                        {
+                            Id = entry.ModId,
+                            Version = "0.0.0",
+                            Repository = entry.RepositoryUrl!
+                        };
+                        try
+                        {
+                            // Find the current mod to preserve its active/inactive state
+                            var currentMod = allMods.FirstOrDefault(m =>
+                                string.Equals(m.Id, entry.ModId, StringComparison.OrdinalIgnoreCase));
+
+                            using var resolveCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                            var updateInfo = await _updateService.CheckUpdateAsync(stub, resolveCts.Token);
+                            if (updateInfo?.DownloadUrl != null && currentMod != null)
+                            {
+                                BusyMessage = _localization.GetString("busy.downloading_mod", entry.ModId) + $" ({reDone + 1}/{totalCount})";
+                                var progress = new Progress<double>(p =>
+                                    BusyMessage = _localization.GetString("busy.download_progress", entry.ModId, p) + $" ({reDone + 1}/{totalCount})");
+
+                                // Use UpdateModAsync which properly: archives current version,
+                                // deletes old folder, downloads & installs new version preserving
+                                // the active/inactive state.
+                                updateInfo.LatestVersion = entry.Version;
+                                var ok = await _modInstall.UpdateModAsync(
+                                    currentMod, updateInfo,
+                                    _settings.Settings.GamePath, _settings.Settings.StoragePath,
+                                    progress);
+                                if (ok) reDone++;
+                                else reFailedEntries.Add((entry.ModId, entry.HomePageUrl));
+                            }
+                            else
+                            {
+                                reFailedEntries.Add((entry.ModId, entry.HomePageUrl));
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            reFailedEntries.Add((entry.ModId, entry.HomePageUrl));
+                        }
+                    }
+                }
+
+                // Refresh so the applied correct versions appear in the diff
+                await RefreshModsAsync();
+                allMods = AvailableMods.Concat(ActiveMods).Select(v => v.ModInfo).ToList();
+                diff = _profileService.ComputeDiff(profile, allMods);
+
+                ClearBusy();
+                if (reFailedEntries.Count > 0)
+                {
+                    var openNexus = await _dialogService.ShowFailedDownloadsAsync(
+                        _localization.GetString("dialog.redownload_failed_title"), reFailedEntries);
+                    if (openNexus)
+                    {
+                        foreach (var (_, homePageUrl) in reFailedEntries.Where(f => !string.IsNullOrEmpty(f.HomePageUrl)))
+                            Helpers.PlatformHelper.Open(homePageUrl!);
+                    }
+                    StatusMessage = _localization.GetString("status.applied_correct_version_failed", reDone, reFailedEntries.Count);
+                }
+                else if (reDone > 0)
+                {
+                    StatusMessage = _localization.GetString("status.applied_correct_version", reDone);
                 }
             }
         }

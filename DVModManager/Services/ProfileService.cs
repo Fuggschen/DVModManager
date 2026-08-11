@@ -130,6 +130,7 @@ public class ProfileService : IProfileService
         var toDeactivate = new List<string>();
         var toRollback = new List<(string, string, string)>();
         var toDownload = new List<ProfileModEntry>();
+        var toRedownload = new List<ProfileModEntry>();
 
         foreach (var entry in profile.Mods)
         {
@@ -148,7 +149,14 @@ public class ProfileService : IProfileService
                 toDeactivate.Add(entry.ModId);
 
             if (!string.IsNullOrEmpty(entry.Version) && entry.Version != current.Version)
-                toRollback.Add((entry.ModId, current.Version, entry.Version));
+            {
+                // If a repository URL is available, prefer re-downloading the correct version
+                // over a local rollback (which may not have the right version cached)
+                if (!string.IsNullOrEmpty(entry.RepositoryUrl))
+                    toRedownload.Add(entry);
+                else
+                    toRollback.Add((entry.ModId, current.Version, entry.Version));
+            }
         }
 
         // Deactivate any mods that aren't in the profile at all
@@ -156,7 +164,7 @@ public class ProfileService : IProfileService
         foreach (var mod in currentMods.Where(m => m.IsActive && !profileModIds.Contains(m.Id)))
             toDeactivate.Add(mod.Id);
 
-        return new ProfileDiff(toActivate, toDeactivate, toRollback, toDownload);
+        return new ProfileDiff(toActivate, toDeactivate, toRollback, toDownload, toRedownload);
     }
 
     private static string GetProfileFilePath(string name, string profilesPath)

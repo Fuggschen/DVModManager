@@ -20,4 +20,5 @@ public record ProfileDiff(
     IReadOnlyList<string> ToActivate,
     IReadOnlyList<string> ToDeactivate,
     IReadOnlyList<(string ModId, string FromVersion, string ToVersion)> ToRollback,
-    IReadOnlyList<ProfileModEntry> ToDownload);
+    IReadOnlyList<ProfileModEntry> ToDownload,
+    IReadOnlyList<ProfileModEntry> ToRedownload);
