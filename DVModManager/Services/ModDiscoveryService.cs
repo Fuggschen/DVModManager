@@ -114,10 +114,20 @@ public sealed class ModDiscoveryService : IModDiscoveryService
         catch { /* watch is optional */ }
     }
 
+    private CancellationTokenSource? _debounceCts;
+
     private void OnFileSystemChange(object sender, FileSystemEventArgs e)
     {
-        // Debounce slightly so rapid changes (e.g., unzipping) fire only once
-        Task.Delay(500).ContinueWith(_ => ModsChanged?.Invoke(this, EventArgs.Empty));
+        // Debounce: cancel any pending fire, schedule a new one after 500ms.
+        // This ensures rapid changes (e.g., unzipping) only fire once.
+        _debounceCts?.Cancel();
+        _debounceCts = new CancellationTokenSource();
+        var token = _debounceCts.Token;
+        _ = Task.Delay(500, token).ContinueWith(t =>
+        {
+            if (!t.IsCanceled)
+                ModsChanged?.Invoke(this, EventArgs.Empty);
+        }, TaskScheduler.Default);
     }
 
     public void StopWatching()

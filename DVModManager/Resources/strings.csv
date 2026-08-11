@@ -172,3 +172,6 @@ busy.rolling_back_cache,"Rolling back from cache ({0}/{1})...",Rollback aus Cach
 busy.downloading_correct,"Downloading correct versions ({0}/{1})...",Richtige Versionen werden heruntergeladen ({0}/{1})…,Téléchargement des versions correctes ({0}/{1})…,
 status.applied_correct_version,Applied correct version for {0} mod(s).,Richtige Version für {0} Mod(s) angewendet.,Version correcte appliquée pour {0} mod(s).,
 status.applied_correct_version_failed,"Applied correct version for {0} mod(s). {1} failed.","Richtige Version für {0} Mod(s) angewendet. {1} fehlgeschlagen.","Version correcte appliquée pour {0} mod(s). {1} échoué(s).",
+dialog.remove_title,Remove Mod,Mod entfernen,Supprimer le mod,
+dialog.remove_message,"Remove ''{0}'' from the list? If the mod folder still exists on disk it will also be deleted.","„{0}"" aus der Liste entfernen? Falls der Mod-Ordner noch auf der Festplatte existiert wird dieser ebenfalls gelöscht.","Supprimer « {0} » de la liste ? Si le dossier du mod existe encore sur le disque, il sera également supprimé.",
+status.removed,Removed: {0},Entfernt: {0},Supprimé : {0},

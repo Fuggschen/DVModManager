@@ -1103,6 +1103,46 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusMessage = _localization.GetString("status.profile_applied", profileName);
     }
 
+    // ── Remove (for externally deleted mods) ─────────────────────────────────
+
+    [RelayCommand(CanExecute = nameof(CanModify))]
+    private async Task RemoveSelectedModAsync()
+    {
+        if (SelectedMod == null) return;
+
+        var displayName = SelectedMod.DisplayName;
+        var confirmed = await _dialogService.ConfirmAsync(
+            _localization.GetString("dialog.remove_title"),
+            _localization.GetString("dialog.remove_message", displayName));
+
+        if (!confirmed) return;
+
+        var modId = SelectedMod.Id;
+
+        // Try to delete the folder from disk if it still exists
+        if (_settings.Settings.GamePath != null)
+        {
+            var folderPath = SelectedMod.ModInfo.FolderPath;
+            if (!string.IsNullOrEmpty(folderPath) && Directory.Exists(folderPath))
+            {
+                try { Directory.Delete(folderPath, true); }
+                catch { /* best-effort */ }
+            }
+        }
+
+        // Remove from the UI lists
+        AvailableMods.Remove(SelectedMod);
+        ActiveMods.Remove(SelectedMod);
+
+        // Clean up any group references
+        foreach (var g in _settings.Settings.ModGroups)
+            g.ModIds.Remove(modId);
+        await _settings.SaveAsync();
+
+        ApplyFilters();
+        StatusMessage = _localization.GetString("status.removed", displayName);
+    }
+
     // ── Refresh ───────────────────────────────────────────────────────────────
 
     [RelayCommand]
@@ -1263,13 +1303,20 @@ public partial class MainWindowViewModel : ViewModelBase
             UpdateSelectedModCommand.NotifyCanExecuteChanged();
             UpdateAllModsCommand.NotifyCanExecuteChanged();
             ApplyProfileCommand.NotifyCanExecuteChanged();
+            RemoveSelectedModCommand.NotifyCanExecuteChanged();
         });
     }
 
+    private volatile bool _pendingExternalRefresh;
+
     private void OnModsChangedExternally(object? sender, EventArgs e)
     {
-        // Skip if a mod operation is already in progress — it will refresh itself when done
-        if (IsBusy) return;
+        if (IsBusy)
+        {
+            // Queue the refresh so it fires after the current operation completes
+            _pendingExternalRefresh = true;
+            return;
+        }
         Dispatcher.UIThread.Post(async () => await RefreshModsAsync());
     }
 
@@ -1387,6 +1434,7 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusMessage = message;
         ActivateSelectedModCommand.NotifyCanExecuteChanged();
         DeactivateSelectedModCommand.NotifyCanExecuteChanged();
+        RemoveSelectedModCommand.NotifyCanExecuteChanged();
     }
 
     private void ClearBusy()
@@ -1395,6 +1443,14 @@ public partial class MainWindowViewModel : ViewModelBase
         BusyMessage = "";
         ActivateSelectedModCommand.NotifyCanExecuteChanged();
         DeactivateSelectedModCommand.NotifyCanExecuteChanged();
+        RemoveSelectedModCommand.NotifyCanExecuteChanged();
+
+        // Process any queued external refresh that was suppressed while busy
+        if (_pendingExternalRefresh)
+        {
+            _pendingExternalRefresh = false;
+            _ = RefreshModsAsync();
+        }
     }
 
     private static Avalonia.Controls.Window GetMainWindow()
