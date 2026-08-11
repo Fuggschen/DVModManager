@@ -22,6 +22,8 @@ public class AppSettings
 
     public bool BackupBeforeChanges { get; set; } = true;
 
+    public bool EnableVersionArchiving { get; set; } = true;
+
     /// <summary>Maximum combined size of all version archives before pruning. Default 5 GB.</summary>
     public long MaxCacheSizeBytes { get; set; } = 5L * 1024 * 1024 * 1024;
 

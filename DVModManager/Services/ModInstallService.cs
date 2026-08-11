@@ -9,6 +9,7 @@ namespace DVModManager.Services;
 public class ModInstallService : IModInstallService
 {
     private readonly IVersionCacheService _versionCache;
+    private readonly ISettingsService _settings;
     private readonly ILogger<ModInstallService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -17,11 +18,14 @@ public class ModInstallService : IModInstallService
         AllowTrailingCommas = true
     };
 
-    public ModInstallService(IVersionCacheService versionCache, ILogger<ModInstallService> logger)
+    public ModInstallService(IVersionCacheService versionCache, ISettingsService settings, ILogger<ModInstallService> logger)
     {
         _versionCache = versionCache;
+        _settings = settings;
         _logger = logger;
     }
+
+    private bool ShouldArchive => _settings.Settings.EnableVersionArchiving;
 
     // ── Activate: Mods.inactive/{folder} → Mods/{folder} ───────────────────────────────────────
 
@@ -172,7 +176,8 @@ public class ModInstallService : IModInstallService
                         if (existingMod != null)
                         {
                             existingMod.FolderPath = targetDir;
-                            await _versionCache.ArchiveCurrentVersionAsync(existingMod, storagePath);
+                            if (ShouldArchive)
+                                await _versionCache.ArchiveCurrentVersionAsync(existingMod, storagePath);
                         }
                     }
                     catch { /* archive failure is non-fatal */ }
@@ -243,7 +248,8 @@ public class ModInstallService : IModInstallService
                         if (existingMod != null)
                         {
                             existingMod.FolderPath = targetDir;
-                            await _versionCache.ArchiveCurrentVersionAsync(existingMod, storagePath);
+                            if (ShouldArchive)
+                                await _versionCache.ArchiveCurrentVersionAsync(existingMod, storagePath);
                         }
                     }
                     catch { /* archive failure is non-fatal */ }
@@ -281,7 +287,7 @@ public class ModInstallService : IModInstallService
             else
             {
                 // Archive current state into the version cache before removing
-                if (Directory.Exists(mod.FolderPath))
+                if (ShouldArchive && Directory.Exists(mod.FolderPath))
                     await _versionCache.ArchiveCurrentVersionAsync(mod, storagePath);
 
                 if (Directory.Exists(mod.FolderPath)) Directory.Delete(mod.FolderPath, true);
@@ -328,7 +334,8 @@ public class ModInstallService : IModInstallService
                     if (currentMod != null)
                     {
                         currentMod.FolderPath = currentPath;
-                        await _versionCache.ArchiveCurrentVersionAsync(currentMod, storagePath);
+                        if (ShouldArchive)
+                            await _versionCache.ArchiveCurrentVersionAsync(currentMod, storagePath);
                     }
                 }
                 Directory.Delete(currentPath, true);
@@ -404,7 +411,8 @@ public class ModInstallService : IModInstallService
             }
 
             // 3. Archive current version and remove original folder
-            await _versionCache.ArchiveCurrentVersionAsync(mod, storagePath);
+            if (ShouldArchive)
+                await _versionCache.ArchiveCurrentVersionAsync(mod, storagePath);
 
             // Remove the original folder now that it is archived.
             // InstallFromArchiveAsync uses modInfo.Id (from the zip) to pick the target path,

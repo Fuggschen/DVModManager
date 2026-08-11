@@ -114,7 +114,7 @@
                                FontWeight="SemiBold"
                                Foreground="#cdd6f4" />
 
-                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" VerticalAlignment="Center">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" VerticalAlignment="Center">
                         <TextBlock Grid.Row="0" Grid.Column="0"
                                    Text="{conv:Localize settings.auto_check_updates}"
                                    Foreground="#cdd6f4"
@@ -146,12 +146,23 @@
                         </StackPanel>
 
                         <TextBlock Grid.Row="2" Grid.Column="0"
+                                   Text="{conv:Localize settings.enable_version_archiving}"
+                                   Foreground="#cdd6f4"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"
+                                   Margin="0,8,0,0" />
+                        <CheckBox Grid.Row="2" Grid.Column="1"
+                                  IsChecked="{Binding EnableVersionArchiving, Mode=TwoWay}"
+                                  HorizontalAlignment="Right"
+                                  Margin="0,8,0,0" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0"
                                    Text="{conv:Localize settings.max_cache_size}"
                                    Foreground="#cdd6f4"
                                    FontSize="13"
                                    VerticalAlignment="Center"
                                    Margin="0,8,0,0" />
-                        <NumericUpDown Grid.Row="2" Grid.Column="1"
+                        <NumericUpDown Grid.Row="3" Grid.Column="1"
                                        Value="{Binding MaxCacheGb, Mode=TwoWay}"
                                        Minimum="1" Maximum="100"
                                        Increment="1"
@@ -162,13 +173,13 @@
                                        HorizontalAlignment="Right"
                                        Margin="0,8,0,0" />
 
-                        <TextBlock Grid.Row="3" Grid.Column="0"
+                        <TextBlock Grid.Row="4" Grid.Column="0"
                                    Text="{conv:Localize settings.language}"
                                    Foreground="#cdd6f4"
                                    FontSize="13"
                                    VerticalAlignment="Center"
                                    Margin="0,8,0,0" />
-                        <ComboBox Grid.Row="3" Grid.Column="1"
+                        <ComboBox Grid.Row="4" Grid.Column="1"
                                   ItemsSource="{Binding AvailableLanguages}"
                                   SelectedItem="{Binding Language, Mode=TwoWay}"
                                   Background="#313244"
