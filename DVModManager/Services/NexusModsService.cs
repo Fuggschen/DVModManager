@@ -129,6 +129,26 @@ public class NexusModsService : INexusModsService
         public string? Version { get; set; }
 
         [System.Text.Json.Serialization.JsonPropertyName("updated_time")]
-        public long? UpdatedTime { get; set; }
+        public System.Text.Json.JsonElement? UpdatedTimeRaw { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public long? UpdatedTime
+        {
+            get
+            {
+                if (UpdatedTimeRaw is not { } elem) return null;
+                try
+                {
+                    return elem.ValueKind switch
+                    {
+                        System.Text.Json.JsonValueKind.Number => elem.GetInt64(),
+                        System.Text.Json.JsonValueKind.String
+                            => long.TryParse(elem.GetString(), out var v) ? v : null,
+                        _ => null
+                    };
+                }
+                catch { return null; }
+            }
+        }
     }
 }
