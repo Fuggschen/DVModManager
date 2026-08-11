@@ -1003,9 +1003,12 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             // Preserve any pending update state before clearing — RefreshModsAsync
             // creates new ModInfo/VM instances so update badges would be lost otherwise
-            var pendingUpdates = AvailableMods.Concat(ActiveMods)
-                .Where(m => m.ModInfo.PendingUpdate != null)
-                .ToDictionary(m => m.Id, m => m.ModInfo.PendingUpdate!, StringComparer.OrdinalIgnoreCase);
+            // A mod can appear twice (same Id in both Mods and Mods.inactive) or as a
+            // duplicate, so guard against duplicate keys with a case-insensitive compare.
+            var pendingUpdates = new Dictionary<string, ModUpdateInfo>(StringComparer.OrdinalIgnoreCase);
+            foreach (var m in AvailableMods.Concat(ActiveMods))
+                if (m.ModInfo.PendingUpdate != null)
+                    pendingUpdates.TryAdd(m.Id, m.ModInfo.PendingUpdate);
 
             AvailableMods.Clear();
             ActiveMods.Clear();
