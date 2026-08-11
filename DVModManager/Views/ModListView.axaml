@@ -25,6 +25,7 @@
                                VerticalAlignment="Center" />
                     <Button Grid.Column="1"
                             Command="{Binding AddGroupCommand}"
+                            CommandParameter="{Binding #Root.Panel}"
                             Content="{conv:Localize button.add_group}"
                             Background="Transparent"
                             BorderThickness="0"

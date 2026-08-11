@@ -153,9 +153,11 @@ public partial class MainWindowViewModel : ViewModelBase
                     }
                 }
             }
-            if (availItems.Count > 0 || group.ModIds.Count == 0)
+            bool belongsToAvailable = group.Panel == null || group.Panel == "available";
+            // Show in available panel if: belongs there with items/empty, OR has mods present
+            if ((belongsToAvailable && (availItems.Count > 0 || group.ModIds.Count == 0))
+                || availItems.Count > 0)
             {
-                // Always show empty groups in the Available panel so new groups are visible
                 newAvailable.Add(BuildHeader(group, availItems.Count, isCollapsedAvail, "available"));
                 if (!isCollapsedAvail)
                     foreach (var item in availItems) newAvailable.Add(item);
@@ -176,7 +178,10 @@ public partial class MainWindowViewModel : ViewModelBase
                     }
                 }
             }
-            if (activeItems.Count > 0)
+            bool belongsToActive = group.Panel == null || group.Panel == "active";
+            // Show in active panel if: belongs there with items/empty, OR has mods present
+            if ((belongsToActive && (activeItems.Count > 0 || group.ModIds.Count == 0))
+                || activeItems.Count > 0)
             {
                 newActive.Add(BuildHeader(group, activeItems.Count, isCollapsedActive, "active"));
                 if (!isCollapsedActive)
@@ -216,9 +221,9 @@ public partial class MainWindowViewModel : ViewModelBase
     // ── Group operations ──────────────────────────────────────────────────────
 
     [RelayCommand]
-    private async Task AddGroupAsync()
+    private async Task AddGroupAsync(string? panel)
     {
-        var group = new ModGroup { Id = Guid.NewGuid().ToString(), Name = "New Group" };
+        var group = new ModGroup { Id = Guid.NewGuid().ToString(), Name = "New Group", Panel = panel };
         _settings.Settings.ModGroups.Add(group);
         await _settings.SaveAsync();
         ApplyGroupedFilters();

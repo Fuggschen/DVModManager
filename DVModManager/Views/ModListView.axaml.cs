@@ -28,6 +28,9 @@ public partial class ModListView : UserControl
     public static readonly StyledProperty<string> FilterProperty =
         AvaloniaProperty.Register<ModListView, string>(nameof(Filter), "");
 
+    public static readonly StyledProperty<string> PanelProperty =
+        AvaloniaProperty.Register<ModListView, string>(nameof(Panel), "");
+
     public string Header
     {
         get => GetValue(HeaderProperty);
@@ -50,6 +53,12 @@ public partial class ModListView : UserControl
     {
         get => GetValue(FilterProperty);
         set => SetValue(FilterProperty, value);
+    }
+
+    public string Panel
+    {
+        get => GetValue(PanelProperty);
+        set => SetValue(PanelProperty, value);
     }
 
     // ── Drag state ────────────────────────────────────────────────────────────

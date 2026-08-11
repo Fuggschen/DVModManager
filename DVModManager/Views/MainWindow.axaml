@@ -117,7 +117,8 @@
                                Header="{Binding PanelAvailableHeader}"
                                Mods="{Binding FilteredAvailableMods}"
                                Filter="{Binding AvailableFilter, Mode=TwoWay}"
-                               SelectedMod="{Binding SelectedMod, Mode=TwoWay}" />
+                               SelectedMod="{Binding SelectedMod, Mode=TwoWay}"
+                               Panel="available" />
 
             <!-- Activate / Deactivate buttons -->
             <StackPanel Grid.Column="1"
@@ -161,7 +162,8 @@
                                Header="{Binding PanelActiveHeader}"
                                Mods="{Binding FilteredActiveMods}"
                                Filter="{Binding ActiveFilter, Mode=TwoWay}"
-                               SelectedMod="{Binding SelectedMod, Mode=TwoWay}" />
+                               SelectedMod="{Binding SelectedMod, Mode=TwoWay}"
+                               Panel="active" />
 
             <!-- Splitter -->
             <GridSplitter Grid.Column="3"
