@@ -108,7 +108,8 @@ public partial class MainWindowViewModel : ViewModelBase
             vm.Author.Contains(filter, StringComparison.OrdinalIgnoreCase);
 
         var groups   = _settings.Settings.ModGroups;
-        var collapsed = _settings.Settings.CollapsedGroupIds;
+        var collapsedAvailable = _settings.Settings.CollapsedGroupIdsAvailable;
+        var collapsedActive    = _settings.Settings.CollapsedGroupIdsActive;
 
         // Index mods by ID for quick lookup
         var availableById = new Dictionary<string, ModItemViewModel>(StringComparer.OrdinalIgnoreCase);
@@ -125,7 +126,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         foreach (var group in groups)
         {
-            bool isCollapsed = collapsed.Contains(group.Id);
+            bool isCollapsedAvail = collapsedAvailable.Contains(group.Id);
 
             // ---- Available panel ----
             var availItems = new List<ModItemViewModel>();
@@ -155,12 +156,13 @@ public partial class MainWindowViewModel : ViewModelBase
             if (availItems.Count > 0 || group.ModIds.Count == 0)
             {
                 // Always show empty groups in the Available panel so new groups are visible
-                newAvailable.Add(BuildHeader(group, availItems.Count, isCollapsed));
-                if (!isCollapsed)
+                newAvailable.Add(BuildHeader(group, availItems.Count, isCollapsedAvail, "available"));
+                if (!isCollapsedAvail)
                     foreach (var item in availItems) newAvailable.Add(item);
             }
 
             // ---- Active panel ----
+            bool isCollapsedActive = collapsedActive.Contains(group.Id);
             var activeItems = new List<ModItemViewModel>();
             foreach (var modId in group.ModIds)
             {
@@ -176,8 +178,8 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             if (activeItems.Count > 0)
             {
-                newActive.Add(BuildHeader(group, activeItems.Count, isCollapsed));
-                if (!isCollapsed)
+                newActive.Add(BuildHeader(group, activeItems.Count, isCollapsedActive, "active"));
+                if (!isCollapsedActive)
                     foreach (var item in activeItems) newActive.Add(item);
             }
         }
@@ -204,9 +206,9 @@ public partial class MainWindowViewModel : ViewModelBase
         FilteredActiveMods    = newActive;
     }
 
-    private ModGroupHeaderViewModel BuildHeader(ModGroup group, int count, bool isCollapsed) =>
+    private ModGroupHeaderViewModel BuildHeader(ModGroup group, int count, bool isCollapsed, string panel) =>
         new(
-            group.Id, group.Name, count, isCollapsed,
+            group.Id, group.Name, count, isCollapsed, panel,
             onRename: RenameGroupAsync,
             onDelete: DeleteGroupAsync,
             onToggle: ToggleGroupCollapseAsync);
@@ -239,15 +241,21 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var vm in AvailableMods.Concat(ActiveMods))
             if (vm.GroupId == groupId) vm.GroupId = null;
         _settings.Settings.ModGroups.Remove(group);
-        _settings.Settings.CollapsedGroupIds.Remove(groupId);
+        _settings.Settings.CollapsedGroupIdsAvailable.Remove(groupId);
+        _settings.Settings.CollapsedGroupIdsActive.Remove(groupId);
         await _settings.SaveAsync();
         ApplyGroupedFilters();
     }
 
-    private async Task ToggleGroupCollapseAsync(string groupId, bool isCollapsed)
+    private async Task ToggleGroupCollapseAsync(string groupId, bool isCollapsed, string panel)
     {
-        if (isCollapsed) _settings.Settings.CollapsedGroupIds.Add(groupId);
-        else             _settings.Settings.CollapsedGroupIds.Remove(groupId);
+        var set = panel == "active"
+            ? _settings.Settings.CollapsedGroupIdsActive
+            : _settings.Settings.CollapsedGroupIdsAvailable;
+
+        if (isCollapsed) set.Add(groupId);
+        else             set.Remove(groupId);
+
         await _settings.SaveAsync();
         ApplyGroupedFilters();
     }

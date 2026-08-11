@@ -6,9 +6,9 @@ namespace DVModManager.ViewModels;
 public partial class ModGroupHeaderViewModel : ViewModelBase
 {
     // Callbacks wired by MainWindowViewModel so the header can reach back without coupling
-    private readonly Func<string, string, Task> _onRename;   // (groupId, newName)
-    private readonly Func<string, Task> _onDelete;            // (groupId)
-    private readonly Func<string, bool, Task> _onToggle;      // (groupId, isCollapsed)
+    private readonly Func<string, string, Task> _onRename;        // (groupId, newName)
+    private readonly Func<string, Task> _onDelete;                 // (groupId)
+    private readonly Func<string, bool, string, Task> _onToggle;  // (groupId, isCollapsed, panel)
 
     [ObservableProperty] private string _groupId = "";
     [ObservableProperty] private string _name = "";
@@ -17,20 +17,25 @@ public partial class ModGroupHeaderViewModel : ViewModelBase
     [ObservableProperty] private bool _isRenaming;
     [ObservableProperty] private string _editName = "";
 
+    /// <summary>Which panel ("available" or "active") this header belongs to.</summary>
+    public string Panel { get; }
+
     public ModGroupHeaderViewModel(
         string groupId,
         string name,
         int modCount,
         bool isCollapsed,
+        string panel,
         Func<string, string, Task> onRename,
         Func<string, Task> onDelete,
-        Func<string, bool, Task> onToggle)
+        Func<string, bool, string, Task> onToggle)
     {
         _groupId     = groupId;
         _name        = name;
         _modCount    = modCount;
         _isCollapsed = isCollapsed;
         _editName    = name;
+        Panel        = panel;
         _onRename    = onRename;
         _onDelete    = onDelete;
         _onToggle    = onToggle;
@@ -40,7 +45,7 @@ public partial class ModGroupHeaderViewModel : ViewModelBase
     private async Task ToggleCollapseAsync()
     {
         IsCollapsed = !IsCollapsed;
-        await _onToggle(GroupId, IsCollapsed);
+        await _onToggle(GroupId, IsCollapsed, Panel);
     }
 
     [RelayCommand]

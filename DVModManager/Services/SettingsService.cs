@@ -25,6 +25,16 @@ public class SettingsService : ISettingsService
 
             var json = await File.ReadAllTextAsync(SettingsFilePath);
             Settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+
+            // Migrate legacy CollapsedGroupIds to per-panel sets
+            if (Settings.CollapsedGroupIds is { Count: > 0 })
+            {
+                if (Settings.CollapsedGroupIdsAvailable.Count == 0)
+                    Settings.CollapsedGroupIdsAvailable = new HashSet<string>(Settings.CollapsedGroupIds);
+                if (Settings.CollapsedGroupIdsActive.Count == 0)
+                    Settings.CollapsedGroupIdsActive = new HashSet<string>(Settings.CollapsedGroupIds);
+                Settings.CollapsedGroupIds = null; // clear legacy field
+            }
         }
         catch
         {

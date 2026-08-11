@@ -30,8 +30,14 @@ public class AppSettings
     /// <summary>User-defined visual groups for both mod panels.</summary>
     public List<ModGroup> ModGroups { get; set; } = [];
 
-    /// <summary>Group IDs that are currently collapsed (persisted).</summary>
-    public HashSet<string> CollapsedGroupIds { get; set; } = [];
+    /// <summary>Group IDs that are currently collapsed in the Available panel (persisted).</summary>
+    public HashSet<string> CollapsedGroupIdsAvailable { get; set; } = [];
+
+    /// <summary>Group IDs that are currently collapsed in the Active panel (persisted).</summary>
+    public HashSet<string> CollapsedGroupIdsActive { get; set; } = [];
+
+    /// <summary>Legacy field — migrated to per-panel sets on load.</summary>
+    public HashSet<string>? CollapsedGroupIds { get; set; }
 
     // --- Derived paths ---
     public string ProfilesPath => Path.Combine(StoragePath, "profiles");
