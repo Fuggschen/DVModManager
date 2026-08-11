@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DVModManager.Helpers;
 using DVModManager.Models;
 
 namespace DVModManager.Services;
@@ -47,11 +48,11 @@ public sealed class ModDiscoveryService : IModDiscoveryService
 
     public async Task<ModInfo?> ParseModInfoAsync(string folderPath, bool isActive)
     {
-        var infoPath = Path.Combine(folderPath, "Info.json");
+        var infoPath = InfoJsonLocator.Locate(folderPath);
 
         ModInfo mod;
 
-        if (!File.Exists(infoPath))
+        if (infoPath == null)
         {
             // Orphan folder — no Info.json
             mod = new ModInfo
