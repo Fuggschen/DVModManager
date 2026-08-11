@@ -145,9 +145,9 @@ Issues and pull requests are welcome.
 
 ### Branching and PR policy
 
-- Please branch from `dev` and open PRs targeting `dev`.
-- The `dev` branch is the most up-to-date integration branch.
-- PRs should only be merged after the `dev` branch build pipeline is passing.
+- Please branch from `beta` and open PRs targeting `beta`.
+- The `beta` branch is the most up-to-date integration branch.
+- PRs should only be merged after the `beta` branch build pipeline is passing.
 
 ### Developer setup
 
