@@ -7,6 +7,17 @@
 		<WarningsAsErrors>CS8600;CS8602;CS8603</WarningsAsErrors>
 	</PropertyGroup>
 
+	<!--
+		The mod manager's own description of what it writes to disk and where, compiled in rather
+		than referenced so the mod still ships as a single DLL. Renaming any of it stops this build
+		too, instead of quietly stopping the mod from finding profiles at runtime.
+	-->
+	<ItemGroup>
+		<Compile Include="..\DVModManager\Models\ManagerStorage.cs" Link="Manager\ManagerStorage.cs"/>
+		<Compile Include="..\DVModManager\Models\PublicSettings.cs" Link="Manager\PublicSettings.cs"/>
+		<Compile Include="..\DVModManager\Models\ModProfile.cs" Link="Manager\ModProfile.cs"/>
+	</ItemGroup>
+
 	<!-- Derail Valley -->
 	<ItemGroup>
 		<Reference Include="Assembly-CSharp">

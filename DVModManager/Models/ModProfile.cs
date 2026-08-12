@@ -1,8 +1,15 @@
 namespace DVModManager.Models;
 
+/// <summary>
+/// A profile as it is stored on disk.
+/// </summary>
+/// <remarks>
+/// This file is compiled into the DVModProfiles mod as well as the manager, so
+/// anything added here has to stay compilable under net48.
+/// </remarks>
 public class ModProfile
 {
-    public string Name { get; set; } = "Default";
+    public string Name { get; set; } = ManagerStorage.DefaultProfileName;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime LastModifiedAt { get; set; } = DateTime.UtcNow;
     public List<ProfileModEntry> Mods { get; set; } = [];

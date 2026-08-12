@@ -5,9 +5,7 @@ namespace DVModManager.Services;
 
 public class SettingsService : ISettingsService
 {
-    private static readonly string SettingsFilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "DVModManager", "settings.json");
+    private static string SettingsFilePath => ManagerStorage.SettingsFilePath;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 

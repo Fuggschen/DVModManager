@@ -2,20 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Newtonsoft.Json.Linq;
+using DVModManager.Models;
+using Newtonsoft.Json;
 
 namespace DVModProfiles.Profiles;
 
 // Read-only view of the mod manager's profiles it has persisted and the one it last applied.
+//
+// Where those files live and what's in them comes from ManagerStorage, ManagerSettings and
+// ModProfile — the manager's own definitions, compiled into this mod. What's left here is only
+// what the manager can't know: that we're reading it from inside the game, possibly through Wine.
 public static class ManagerProfiles
 {
-    private const string MANAGER_DIR = "DVModManager";
-    private const string SETTINGS_FILE = "settings.json";
-    private const string PROFILES_DIR = "profiles";
-
-    // The manager offers this in its own dropdown whether or not a file exists for it, so we do too
-    private const string DEFAULT_PROFILE = "Default";
-
     // Don't spam load from disk
     private static readonly TimeSpan RecheckInterval = TimeSpan.FromSeconds(5);
 
@@ -49,7 +47,7 @@ public static class ManagerProfiles
         }
     }
 
-    // Directory the manager keeps settings.json in or null if it isn't installed for this user.
+    // Directory the manager keeps its settings file in or null if it isn't installed for this user.
     public static string? ConfigDir
     {
         get
@@ -115,7 +113,7 @@ public static class ManagerProfiles
     }
 
     private static bool HasChanged() =>
-        StampOf(configDir == null ? null : Path.Combine(configDir, SETTINGS_FILE)) != settingsStamp
+        StampOf(configDir == null ? null : Path.Combine(configDir, ManagerStorage.SettingsFileName)) != settingsStamp
         || StampOf(profilesDir) != profilesStamp;
 
     private static void Load()
@@ -133,34 +131,37 @@ public static class ManagerProfiles
             return;
         }
 
-        string root = dir;
-        string settingsPath = Path.Combine(dir, SETTINGS_FILE);
+        // Seeded with the directory we found it in, so a settings file that doesn't name a
+        // storage path leaves the manager's data where the manager would look for it.
+        var settings = new PublicSettings { StoragePath = dir };
+        string settingsPath = Path.Combine(dir, ManagerStorage.SettingsFileName);
 
         if (File.Exists(settingsPath))
         {
             settingsStamp = File.GetLastWriteTimeUtc(settingsPath);
+            JsonConvert.PopulateObject(File.ReadAllText(settingsPath), settings);
 
-            var settings = JObject.Parse(File.ReadAllText(settingsPath));
-            activeProfileName = ValueOf(settings, "ActiveProfileName");
+            activeProfileName = string.IsNullOrEmpty(settings.ActiveProfileName)
+                ? null
+                : settings.ActiveProfileName;
 
-            string? storagePath = ValueOf(settings, "StoragePath");
-            if (!string.IsNullOrEmpty(storagePath))
+            string local = ToLocalPath(settings.StoragePath);
+
+            // The manager would resolve a relative path against its own working directory,
+            // which we have no way of reproducing from in here — better to admit we don't know
+            // where the profiles are than to read some arbitrary folder as if it were them.
+            if (!Path.IsPathRooted(local))
             {
-                string local = ToLocalPath(storagePath!);
-
-                if (!Path.IsPathRooted(local))
-                {
-                    Main.Logger.Warning($"The mod manager's storage path '{storagePath}' isn't absolute; " +
-                                        "can't tell where its profiles are from in here");
-                    return;
-                }
-
-                root = local;
+                Main.Logger.Warning($"The mod manager's storage path '{settings.StoragePath}' isn't absolute; " +
+                                    "can't tell where its profiles are from in here");
+                return;
             }
+
+            settings.StoragePath = local;
         }
 
-        storageRoot = root;
-        profilesDir = Path.Combine(root, PROFILES_DIR);
+        storageRoot = settings.StoragePath;
+        profilesDir = settings.ProfilesPath;
         profilesStamp = StampOf(profilesDir);
         names = ReadNames(profilesDir);
     }
@@ -175,8 +176,12 @@ public static class ManagerProfiles
             {
                 try
                 {
-                    string? name = ValueOf(JObject.Parse(File.ReadAllText(file)), "Name");
-                    found.Add(string.IsNullOrEmpty(name) ? Path.GetFileNameWithoutExtension(file) : name!);
+                    ModProfile? profile = JsonConvert.DeserializeObject<ModProfile>(
+                        File.ReadAllText(file), ManagerJson.ProfileHeader);
+                    if (profile != null)
+                    {
+                        found.Add(profile.Name);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -186,9 +191,9 @@ public static class ManagerProfiles
         }
 
         List<string> sorted = [.. found.Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.OrdinalIgnoreCase)];
-        if (!sorted.Contains(DEFAULT_PROFILE, StringComparer.Ordinal))
+        if (!sorted.Contains(ManagerStorage.DefaultProfileName, StringComparer.Ordinal))
         {
-            sorted.Insert(0, DEFAULT_PROFILE);
+            sorted.Insert(0, ManagerStorage.DefaultProfileName);
         }
 
         return sorted;
@@ -210,12 +215,9 @@ public static class ManagerProfiles
 
     private static IEnumerable<string> Candidates()
     {
-        // Native Windows, or a Wine bottle the manager runs in too
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        if (!string.IsNullOrEmpty(appData))
-        {
-            yield return Path.Combine(appData, MANAGER_DIR);
-        }
+        // Native Windows, or a Wine bottle the manager runs in too. Under Wine this resolves to
+        // the bottle's own AppData, which is where a manager running inside it would have written.
+        yield return ManagerStorage.ConfigDirectory;
 
         // Under Proton our %APPDATA% is inside the prefix, while the manager is a Linux build
         // writing to ~/.config. Wine maps the Linux root to Z:, so those paths are still reachable.
@@ -230,13 +232,13 @@ public static class ManagerProfiles
         string? xdg = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
         if (IsLinuxPath(xdg))
         {
-            yield return $"{xdg}/{MANAGER_DIR}";
+            yield return $"{xdg}/{ManagerStorage.DirectoryName}";
         }
 
         string? home = Environment.GetEnvironmentVariable("HOME");
         if (IsLinuxPath(home))
         {
-            yield return $"{home}/.config/{MANAGER_DIR}";
+            yield return $"{home}/.config/{ManagerStorage.DirectoryName}";
         }
 
         // Neither is guaranteed to survive into the prefix's environment but Steam's own install path
@@ -245,7 +247,7 @@ public static class ManagerProfiles
              IsLinuxPath(dir);
              dir = LinuxParent(dir!))
         {
-            yield return $"{dir}/.config/{MANAGER_DIR}";
+            yield return $"{dir}/.config/{ManagerStorage.DirectoryName}";
         }
     }
 
@@ -278,7 +280,4 @@ public static class ManagerProfiles
         // manager changes a profile's name — it writes each one to a file named after it.
         return Directory.Exists(path) ? Directory.GetLastWriteTimeUtc(path) : DateTime.MinValue;
     }
-
-    private static string? ValueOf(JObject obj, string name) =>
-        obj.Property(name, StringComparison.OrdinalIgnoreCase)?.Value.Value<string>();
 }

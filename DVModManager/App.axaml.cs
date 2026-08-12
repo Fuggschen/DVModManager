@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using DVModManager.Models;
 using DVModManager.Services;
 using DVModManager.ViewModels;
 using DVModManager.Views;
@@ -93,11 +94,11 @@ public class App : Application
             var configBase = !string.IsNullOrEmpty(xdg) && Path.IsPathRooted(xdg)
                 ? xdg
                 : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
-            return Path.Combine(configBase, "DVModManager");
+            return Path.Combine(configBase, ManagerStorage.DirectoryName);
         }
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "DVModManager");
+            ManagerStorage.DirectoryName);
     }
 
     private static void ConfigureServices(IServiceCollection services)

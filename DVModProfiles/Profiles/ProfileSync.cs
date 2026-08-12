@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using DVModManager.Models;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace DVModProfiles.Profiles;
 
@@ -140,7 +140,7 @@ public static class ProfileSync
                 else
                 {
                     Directory.CreateDirectory(profilesDir);
-                    File.WriteAllText(Path.Combine(profilesDir, FileNameFor(name)), there.Json);
+                    File.WriteAllText(Path.Combine(profilesDir, ManagerStorage.ProfileFileName(name)), there.Json);
                     updated[name] = there.Modified;
                     downloaded++;
                 }
@@ -207,12 +207,10 @@ public static class ProfileSync
 
     private static void Add(Dictionary<string, Entry> entries, string key, string json, string fallbackName)
     {
-        var parsed = JObject.Parse(json);
-        string? name = parsed.Property("Name", StringComparison.OrdinalIgnoreCase)?.Value.Value<string>();
-        DateTime modified = ParseUtc(parsed.Property("LastModifiedAt", StringComparison.OrdinalIgnoreCase)
-            ?.Value.Value<string>());
+        ModProfile? profile = JsonConvert.DeserializeObject<ModProfile>(json, ManagerJson.ProfileHeader);
+        string name = string.IsNullOrEmpty(profile?.Name) ? fallbackName : profile!.Name;
 
-        entries[string.IsNullOrEmpty(name) ? fallbackName : name!] = new Entry(key, modified, json);
+        entries[name] = new Entry(key, profile?.LastModifiedAt ?? DateTime.MinValue, json);
     }
 
     private static Dictionary<string, DateTime> ReadManifest(string profilesDir)
@@ -286,17 +284,7 @@ public static class ProfileSync
 
     private static string ManifestPath => Path.Combine(Main.ModEntry.Path, MANIFEST_FILE);
 
-    private static string CloudKey(string profileName) => CLOUD_PREFIX + FileNameFor(profileName);
-
-    private static string FileNameFor(string profileName)
-    {
-        foreach (char c in Path.GetInvalidFileNameChars())
-        {
-            profileName = profileName.Replace(c, '_');
-        }
-
-        return profileName + ".json";
-    }
+    private static string CloudKey(string profileName) => CLOUD_PREFIX + ManagerStorage.ProfileFileName(profileName);
 
     // The manager writes these with System.Text.Json, so they're round-trippable UTC
     private static DateTime ParseUtc(string? value) =>
