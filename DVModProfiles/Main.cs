@@ -42,11 +42,17 @@ public static class Main
 
     private static void OnGUI(UnityModManager.ModEntry modEntry)
     {
-        bool useCloud = GUILayout.Toggle(Config.useSteamCloud, "  Store profiles in Steam Cloud (when available)");
+        bool useCloud = GUILayout.Toggle(Config.useSteamCloud, "  Sync profiles and mod settings through Steam Cloud (when available)");
         if (useCloud != Config.useSteamCloud)
         {
             ProfileStorage.SetUseSteamCloud(useCloud);
+            ProfileSync.Reset();
         }
+
+        string? managerDir = ManagerProfiles.ConfigDir;
+        GUILayout.Label(managerDir == null
+            ? "Mod manager storage not found — install DV Mod Manager to pick a profile for your saves."
+            : $"Reading profiles from the mod manager at: {managerDir}");
     }
 
     private static void OnSaveGUI(UnityModManager.ModEntry modEntry) => Config.Save(modEntry);

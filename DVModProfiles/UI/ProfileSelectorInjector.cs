@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using DV.UI;
@@ -8,12 +7,11 @@ using DV.UIFramework;
 using HarmonyLib;
 using DVModProfiles.Profiles;
 using UnityEngine;
-using UnityModManagerNet;
 
 namespace DVModProfiles.UI;
 
-// Harmony patches that graft the mod-profile UI onto the game's load menu and apply the
-// associated profile when a session is loaded / continued / started.
+// Harmony patches that graft the mod-profile UI onto the game's load menu, and that check a
+// session's profile against the mod manager's before letting it load.
 internal static class ProfileSelectorInjector
 {
     [HarmonyPatch(typeof(ContinueLoadNewControllerSingle), "Awake")]
@@ -64,17 +62,16 @@ internal static class ProfileSelectorInjector
 
     private static PopupManager? popupManager;
 
-    // Set immediately before re-invoking a click so the gate chain is skipped and the load proceeds.
-    private static bool bypassGates;
+    // Set immediately before re-invoking a click so the gate is skipped and the load proceeds.
+    private static bool bypassGate;
 
-    // Intercepts the load. When re-invoked after the player has cleared every gate it lets the load
-    // through; otherwise it starts the async resolution chain and cancels this click. The chain's
-    // final step applies the profile and re-invokes the click to actually load.
+    // Intercepts the load. Offers to quit if the loaded profile doesn't match.
+    // If it does match, the profile's mod settings are restored and the load carries on.
     private static bool GateAndApply(ContinueLoadNewControllerSingle controller, string methodName)
     {
-        if (bypassGates)
+        if (bypassGate)
         {
-            bypassGates = false;
+            bypassGate = false;
             return true;
         }
 
@@ -89,89 +86,40 @@ internal static class ProfileSelectorInjector
             return true;
         }
 
-        ModProfile? profile = ProfileStore.Load(profileName);
-        if (profile == null)
+        string? active = ManagerProfiles.ActiveProfileName;
+
+        // With no manager storage to read there's nothing to check against, so take the save at
+        // its word and restore what settings we have.
+        if (active == null || string.Equals(profileName, active, StringComparison.Ordinal))
         {
-            Main.Logger.Warning($"Session is associated with profile '{profileName}' but it no longer exists");
-            SaveAssociations.Set(controller.CurrentThing, null);
+            SettingsApplier.Apply(profileName);
             return true;
         }
 
-        if (ProfileApplier.MissingEnabledMods(profile).Count == 0
-            && ProfileApplier.UnknownInstalledMods(profile).Count == 0
-            && ProfileApplier.ModsRequiringRestart(profile).Count == 0)
+        if (!TryGetTwoButtonPopup(controller, out PopupManager pm, out Popup prefab))
         {
-            ProfileApplier.Apply(profile);
+            Main.Logger.Warning($"Session is associated with profile '{profileName}' but the mod manager has " +
+                                $"'{active}' applied, and no popup is available to ask; loading anyway.");
+            SettingsApplier.Apply(profileName);
             return true;
         }
 
-        ResolveMissingMods(controller, methodName, profile);
+        WarnProfileMismatch(controller, methodName, pm, prefab, profileName, active);
         return false;
     }
 
-    private static void ResolveMissingMods(ContinueLoadNewControllerSingle controller, string methodName, ModProfile profile)
+    private static void WarnProfileMismatch(ContinueLoadNewControllerSingle controller, string methodName,
+                                            PopupManager pm, Popup prefab, string profileName, string active)
     {
         try
         {
-            List<string> missing = ProfileApplier.MissingEnabledMods(profile);
-            if (missing.Count == 0)
-            {
-                ResolveUnknownMods(controller, methodName, profile);
-                return;
-            }
-
-            string names = string.Join(", ", missing.Select(id =>
-                profile.DisplayNames.TryGetValue(id, out string name) ? name : id));
-
-            if (!TryGetTwoButtonPopup(controller, out PopupManager pm, out Popup prefab))
-            {
-                Main.Logger.Warning($"Profile '{profile.Name}' is missing mod(s) {names} and no popup is " +
-                                     "available; load cancelled.");
-                return;
-            }
-
             var keys = new PopupLocalizationKeys
             {
-                labelKey = $"Profile '{profile.Name}' expects mod(s) that aren't installed: {names}. Loading " +
-                           "this save without them may cause errors or lost progress. Continue anyway?",
-                positiveKey = "Continue",
-                negativeKey = "Cancel",
-            };
-
-            OnPositive(pm, prefab, keys, () => ResolveUnknownMods(controller, methodName, profile));
-        }
-        catch (Exception ex)
-        {
-            Main.Logger.LogException("Missing-mods gate failed", ex);
-        }
-    }
-
-    private static void ResolveUnknownMods(ContinueLoadNewControllerSingle controller, string methodName, ModProfile profile)
-    {
-        try
-        {
-            List<UnityModManager.ModEntry> unknown = ProfileApplier.UnknownInstalledMods(profile);
-            if (unknown.Count == 0)
-            {
-                ResolveRestart(controller, methodName, profile);
-                return;
-            }
-
-            string names = string.Join(", ", unknown.Select(m => m.Info.DisplayName));
-
-            if (!TryGetTwoButtonPopup(controller, out PopupManager pm, out Popup prefab))
-            {
-                Main.Logger.Warning($"Profile '{profile.Name}' doesn't list installed mod(s) {names} and no " +
-                                     "popup is available; load cancelled.");
-                return;
-            }
-
-            var keys = new PopupLocalizationKeys
-            {
-                labelKey = $"Mod(s) installed but not in profile '{profile.Name}': {names}. Add them to the " +
-                           "profile, or disable them for this save?",
-                positiveKey = "Add to profile",
-                negativeKey = "Disable",
+                labelKey = $"This save uses mod profile '{profileName}', but the mod manager last applied " +
+                           $"'{active}', so the mods loaded right now are that profile's. Loading anyway may " +
+                           "cause errors or lost progress. Quit, so you can switch profiles in the mod manager?",
+                positiveKey = "Quit",
+                negativeKey = "Load anyway",
             };
 
             pm.ShowPopup(prefab, keys, keepLiteralData: true).Closed += result =>
@@ -179,76 +127,21 @@ internal static class ProfileSelectorInjector
                 switch (result.closedBy)
                 {
                     case PopupClosedByAction.Positive:
-                        ProfileStore.AddMods(profile, unknown);
-                        ResolveRestart(controller, methodName, profile);
+                        Main.Logger.Log($"Quitting so profile '{profileName}' can be applied in the mod manager");
+                        Application.Quit();
                         break;
                     case PopupClosedByAction.Negative:
-                        ResolveRestart(controller, methodName, profile);
+                        SettingsApplier.Apply(profileName);
+                        bypassGate = true;
+                        Reinvoke(controller, methodName);
                         break;
                 }
             };
         }
         catch (Exception ex)
         {
-            Main.Logger.LogException("Unknown-mods gate failed", ex);
+            Main.Logger.LogException("Profile mismatch gate failed", ex);
         }
-    }
-
-    private static void ResolveRestart(ContinueLoadNewControllerSingle controller, string methodName, ModProfile profile)
-    {
-        try
-        {
-            List<UnityModManager.ModEntry> mods = ProfileApplier.ModsRequiringRestart(profile);
-            if (mods.Count == 0)
-            {
-                ProfileApplier.Apply(profile);
-                bypassGates = true;
-                Reinvoke(controller, methodName);
-                return;
-            }
-
-            string names = string.Join(", ", mods.Select(m => m.Info.DisplayName));
-
-            if (!TryGetTwoButtonPopup(controller, out PopupManager pm, out Popup prefab))
-            {
-                Main.Logger.Warning("Restart popup unavailable; persisting changes for next manual restart.");
-                ProfileApplier.Apply(profile);
-                return;
-            }
-
-            string prompt = GameRestarter.CanAutoRestart
-                ? "Restart now to apply?"
-                : "Auto-restart isn't available under Proton. Quit now and relaunch from Steam?";
-
-            var keys = new PopupLocalizationKeys
-            {
-                labelKey = $"Profile '{profile.Name}' needs to turn off mod(s) that can't be unloaded while " +
-                           $"the game is running: {names}. {prompt}",
-                positiveKey = GameRestarter.CanAutoRestart ? "Restart" : "Quit",
-                negativeKey = "Cancel",
-            };
-
-            OnPositive(pm, prefab, keys, () =>
-            {
-                ProfileApplier.Apply(profile);
-                GameRestarter.RestartOrQuit();
-            });
-        }
-        catch (Exception ex)
-        {
-            Main.Logger.LogException("Restart gate failed", ex);
-        }
-    }
-
-    private static void OnPositive(PopupManager pm, Popup prefab, PopupLocalizationKeys keys, Action onPositive)
-    {
-        pm.ShowPopup(prefab, keys, keepLiteralData: true).Closed += result =>
-        {
-            if (result.closedBy == PopupClosedByAction.Positive)
-            {
-                onPositive();
-            }
-        };
     }
 
     private static bool TryGetTwoButtonPopup(ContinueLoadNewControllerSingle controller, out PopupManager pm, out Popup prefab)
@@ -271,5 +164,4 @@ internal static class ProfileSelectorInjector
             Main.Logger.LogException($"Failed to re-invoke {methodName}", ex);
         }
     }
-
 }

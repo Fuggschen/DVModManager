@@ -109,6 +109,22 @@ Applying a profile can trigger:
 
 > **Security note:** ZIP modpacks contain the actual mod binaries. Only import modpacks from sources you trust.
 
+### In-game profile associations
+
+The optional [DVModProfiles](DVModProfiles/README.md) mod adds a "Mod Profile" row to Derail Valley's
+save menu, listing the profiles this app has saved under `profiles/` and letting you tag each save
+with the one it belongs to. When you load a save whose profile isn't the one the app last applied,
+the mod warns you and offers to quit so you can switch profiles in the app to the correct one.
+
+The in-game menu also allows you to optionally associate UMM mod settings with a profile, so that the correct
+settings for a mod will be applied when it is loaded.
+
+### Steam Cloud sync
+
+With the mod installed and its Steam Cloud setting on, your `profiles/` files are mirrored into
+Derail Valley's cloud quota and merged onto your other machines. Steam synchronizes the files whenever the 
+the game starts or quits.
+
 ## Updates
 
 - `Check Updates` scans all detected mods.

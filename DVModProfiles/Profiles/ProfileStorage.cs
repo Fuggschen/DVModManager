@@ -7,7 +7,8 @@ using Steamworks;
 
 namespace DVModProfiles.Profiles;
 
-// Persistence backend for profiles and associations. Keys are unix-style paths.
+// Persistence backend for per-profile mod settings and legacy associations. Keys are unix-style
+// paths.
 public interface IStorageBackend
 {
     bool TryRead(string key, out string text);
@@ -30,7 +31,7 @@ public static class ProfileStorage
     public static void Reset() => backend = null;
 
     // Applies a change to the Steam Cloud opt-in setting, copying existing files from the old
-    // backend into the new one so profiles aren't lost when switching.
+    // backend into the new one so saved mod settings aren't lost when switching.
     public static void SetUseSteamCloud(bool useSteamCloud)
     {
         if (useSteamCloud == Main.Config.useSteamCloud)

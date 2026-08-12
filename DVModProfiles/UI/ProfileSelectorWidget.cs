@@ -5,7 +5,6 @@ using DV.UI;
 using DV.UI.PresetEditors;
 using DV.UIFramework;
 using DVModProfiles.Profiles;
-using TMPro;
 using UnityEngine;
 
 namespace DVModProfiles.UI;
@@ -100,8 +99,8 @@ public class ProfileSelectorWidget : MonoBehaviour
             ProfileTooltipText custom = tip.GetComponent<ProfileTooltipText>()
                                         ?? tip.gameObject.AddComponent<ProfileTooltipText>();
             custom.Text = isGear
-                ? "Save the current mod configuration as a profile, or delete the selected one."
-                : "The mod profile applied when this save is loaded.";
+                ? "Save the current mod settings for the selected profile, or clear the saved ones."
+                : "The mod manager profile this save uses. Its mod settings are applied when the save is loaded.";
         }
     }
 
@@ -124,6 +123,8 @@ public class ProfileSelectorWidget : MonoBehaviour
             return;
         }
 
+        ProfileSync.EnsureSynced();
+
         bool active = difficultySelector != null && difficultySelector.gameObject.activeSelf;
         if (row.activeSelf != active)
         {
@@ -135,9 +136,8 @@ public class ProfileSelectorWidget : MonoBehaviour
             return;
         }
 
-        RebuildOptions();
-
         string? associated = SaveAssociations.Get(CurrentSession);
+        RebuildOptions(associated);
         int index = associated == null ? 0 : Mathf.Max(0, options.IndexOf(associated));
 
         suppressEvents = true;
@@ -146,11 +146,18 @@ public class ProfileSelectorWidget : MonoBehaviour
         suppressEvents = false;
     }
 
-    private void RebuildOptions()
+    private void RebuildOptions(string? associated)
     {
         options.Clear();
         options.Add(NONE_OPTION);
-        options.AddRange(ProfileStore.ListProfileNames());
+        options.AddRange(ManagerProfiles.ListNames());
+
+        if (associated != null && !options.Contains(associated))
+        {
+            Main.Logger.Warning($"Save is associated with mod profile '{associated}', which the mod manager " +
+                                "doesn't have");
+            options.Add(associated);
+        }
     }
 
     private IGameSession? CurrentSession => controller != null ? controller.CurrentThing : null;
@@ -176,36 +183,51 @@ public class ProfileSelectorWidget : MonoBehaviour
 
     private void OnConfigureClicked()
     {
-        if (!TryGetPopups(out PopupManager pm, out DifficultyController editor) ||
-            editor.twoButtonPopupPrefab == null)
+        if (!TryGetPopups(out PopupManager pm, out DifficultyController editor))
         {
             return;
         }
 
         string? selected = SelectedProfileName;
+        if (selected == null)
+        {
+            var pick = new PopupLocalizationKeys
+            {
+                labelKey = "Choose the mod profile this save uses first — mod settings are saved against a " +
+                           "profile. Profiles themselves are created in the mod manager.",
+                positiveKey = "OK",
+                negativeKey = "Cancel",
+            };
+
+            pm.ShowPopup(editor.twoButtonPopupPrefab, pick, keepLiteralData: true);
+            return;
+        }
+
+        bool hasSaved = SettingsStore.Exists(selected);
         var keys = new PopupLocalizationKeys
         {
-            labelKey = selected == null
-                ? "Mod profiles — save the current mod configuration as a new profile?"
-                : $"Mod profile '{selected}' — save over it, or delete it?",
+            labelKey = hasSaved
+                ? $"Mod settings for profile '{selected}' — overwrite them with the current settings, or clear them?"
+                : $"Save the current mod settings for profile '{selected}'?",
             positiveKey = "Save",
-            negativeKey = selected == null ? "Cancel" : "Delete",
+            negativeKey = hasSaved ? "Clear" : "Cancel",
         };
 
         pm.ShowPopup(editor.twoButtonPopupPrefab, keys, keepLiteralData: true).Closed += result =>
         {
             if (result.closedBy == PopupClosedByAction.Positive)
             {
-                ShowSavePopup();
+                SettingsStore.Capture(selected);
+                Refresh();
             }
-            else if (result.closedBy == PopupClosedByAction.Negative && selected != null)
+            else if (result.closedBy == PopupClosedByAction.Negative && hasSaved)
             {
-                ShowDeletePopup(selected);
+                ShowClearPopup(selected);
             }
         };
     }
 
-    private void ShowSavePopup()
+    private void ShowClearPopup(string profileName)
     {
         if (!TryGetPopups(out PopupManager pm, out DifficultyController editor))
         {
@@ -214,46 +236,8 @@ public class ProfileSelectorWidget : MonoBehaviour
 
         var keys = new PopupLocalizationKeys
         {
-            labelKey = "Name this mod profile",
-            positiveKey = "Save",
-            negativeKey = "Cancel",
-        };
-
-        Popup popup = pm.ShowPopup(editor.renamePopupPrefab, keys, keepLiteralData: true);
-        TMP_InputField? input = popup.GetComponentInChildren<TMP_InputField>(true);
-        input?.text = SelectedProfileName ?? NextDefaultName();
-
-        popup.Closed += result =>
-        {
-            if (result.closedBy != PopupClosedByAction.Positive)
-            {
-                return;
-            }
-
-            string name = (result.data ?? "").Trim();
-            if (string.IsNullOrEmpty(name))
-            {
-                return;
-            }
-
-            ProfileStore.Capture(name);
-            SaveAssociations.Set(CurrentSession, name);
-
-            Refresh();
-        };
-    }
-
-    private void ShowDeletePopup(string name)
-    {
-        if (!TryGetPopups(out PopupManager pm, out DifficultyController editor))
-        {
-            return;
-        }
-
-        var keys = new PopupLocalizationKeys
-        {
-            labelKey = $"Delete mod profile '{name}'?",
-            positiveKey = "Delete",
+            labelKey = $"Clear the mod settings saved for profile '{profileName}'?",
+            positiveKey = "Clear",
             negativeKey = "Cancel",
         };
 
@@ -264,15 +248,8 @@ public class ProfileSelectorWidget : MonoBehaviour
                 return;
             }
 
-            ProfileStore.Delete(name);
-
-            // Other sessions still pointing at this profile clear themselves the next time they're
-            // loaded; this one is in front of us, so unbind it now.
-            if (SaveAssociations.Get(CurrentSession) == name)
-            {
-                SaveAssociations.Set(CurrentSession, null);
-            }
-
+            SettingsStore.Delete(profileName);
+            Main.Logger.Log($"Cleared the mod settings saved for profile '{profileName}'");
             Refresh();
         };
     }
@@ -283,9 +260,9 @@ public class ProfileSelectorWidget : MonoBehaviour
         pm = controller.FindPopupManager(ref popupManager);
         editor = difficultyEditor!;
 
-        if (pm == null || editor == null || editor.renamePopupPrefab == null || editor.deletePopupPrefab == null)
+        if (pm == null || editor == null || editor.twoButtonPopupPrefab == null || editor.deletePopupPrefab == null)
         {
-            Main.Logger.Warning("Could not resolve popup manager / prefabs for profile management");
+            Main.Logger.Warning("Could not resolve popup manager / prefabs for mod settings management");
             return false;
         }
 
@@ -296,18 +273,5 @@ public class ProfileSelectorWidget : MonoBehaviour
         }
 
         return true;
-    }
-
-    private static string NextDefaultName()
-    {
-        var existing = new HashSet<string>(ProfileStore.ListProfileNames());
-        for (int i = 1; ; i++)
-        {
-            string candidate = $"Profile {i}";
-            if (!existing.Contains(candidate))
-            {
-                return candidate;
-            }
-        }
     }
 }
