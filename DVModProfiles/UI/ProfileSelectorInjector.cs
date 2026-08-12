@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using DV.Common;
 using DV.UI;
 using DV.UI.PresetEditors;
 using DV.UIFramework;
@@ -42,32 +43,30 @@ internal static class ProfileSelectorInjector
         }
     }
 
-    [HarmonyPatch(typeof(ContinueLoadNewControllerSingle), "OnLoadClicked")]
-    private static class OnLoadClickedPatch
+    // Where every button that starts a game converges
+    [HarmonyPatch(typeof(MainMenuController), "OnContinueGameRequested")]
+    private static class ContinueGamePatch
     {
-        private static bool Prefix(ContinueLoadNewControllerSingle __instance) => GateAndApply(__instance, "OnLoadClicked");
+        private static bool Prefix(MainMenuController __instance, ISaveGame saveGame) =>
+            GateAndApply(__instance, "OnContinueGameRequested", saveGame?.ParentSession, saveGame);
     }
 
-    [HarmonyPatch(typeof(ContinueLoadNewControllerSingle), "OnContinueClicked")]
-    private static class OnContinueClickedPatch
+    [HarmonyPatch(typeof(MainMenuController), "OnStartNewGameRequested")]
+    private static class StartNewGamePatch
     {
-        private static bool Prefix(ContinueLoadNewControllerSingle __instance) => GateAndApply(__instance, "OnContinueClicked");
-    }
-
-    [HarmonyPatch(typeof(ContinueLoadNewControllerSingle), "OnStartNewSessionClicked")]
-    private static class OnStartNewSessionClickedPatch
-    {
-        private static bool Prefix(ContinueLoadNewControllerSingle __instance) => GateAndApply(__instance, "OnStartNewSessionClicked");
+        private static bool Prefix(MainMenuController __instance, UIStartGameData data) =>
+            GateAndApply(__instance, "OnStartNewGameRequested", data?.session, data);
     }
 
     private static PopupManager? popupManager;
 
-    // Set immediately before re-invoking a click so the gate is skipped and the load proceeds.
+    // Set immediately before re-invoking a load so the gate is skipped and it proceeds.
     private static bool bypassGate;
 
-    // Intercepts the load. Offers to quit if the loaded profile doesn't match.
-    // If it does match, the profile's mod settings are restored and the load carries on.
-    private static bool GateAndApply(ContinueLoadNewControllerSingle controller, string methodName)
+    // Intercepts the load. Offers to quit, load anyway, or go back if the loaded profile doesn't
+    // match. If it does match, the profile's mod settings are restored and the load carries on.
+    private static bool GateAndApply(MainMenuController menu, string methodName, IGameSession? session,
+                                     object? argument)
     {
         if (bypassGate)
         {
@@ -75,12 +74,7 @@ internal static class ProfileSelectorInjector
             return true;
         }
 
-        if (controller.CurrentThing == null)
-        {
-            return true;
-        }
-
-        string? profileName = SaveAssociations.Get(controller.CurrentThing);
+        string? profileName = SaveAssociations.Get(session);
         if (profileName == null)
         {
             return true;
@@ -96,7 +90,7 @@ internal static class ProfileSelectorInjector
             return true;
         }
 
-        if (!TryGetTwoButtonPopup(controller, out PopupManager pm, out Popup prefab))
+        if (!TryGetPopup(menu, out PopupManager pm, out Popup prefab))
         {
             Main.Logger.Warning($"Session is associated with profile '{profileName}' but the mod manager has " +
                                 $"'{active}' applied, and no popup is available to ask; loading anyway.");
@@ -104,11 +98,11 @@ internal static class ProfileSelectorInjector
             return true;
         }
 
-        WarnProfileMismatch(controller, methodName, pm, prefab, profileName, active);
+        WarnProfileMismatch(menu, methodName, argument, pm, prefab, profileName, active);
         return false;
     }
 
-    private static void WarnProfileMismatch(ContinueLoadNewControllerSingle controller, string methodName,
+    private static void WarnProfileMismatch(MainMenuController menu, string methodName, object? argument,
                                             PopupManager pm, Popup prefab, string profileName, string active)
     {
         try
@@ -117,12 +111,17 @@ internal static class ProfileSelectorInjector
             {
                 labelKey = $"This save uses mod profile '{profileName}', but the mod manager last applied " +
                            $"'{active}', so the mods loaded right now are that profile's. Loading anyway may " +
-                           "cause errors or lost progress. Quit, so you can switch profiles in the mod manager?",
+                           "cause errors or lost progress. Quit to switch profiles in the mod manager, or go " +
+                           "back and pick another save.",
                 positiveKey = "Quit",
                 negativeKey = "Load anyway",
+                abortionKey = "Go back",
             };
 
-            pm.ShowPopup(prefab, keys, keepLiteralData: true).Closed += result =>
+            Popup popup = pm.ShowPopup(prefab, keys, keepLiteralData: true);
+            popup.EscAction = PopupClosedByAction.Abortion;
+
+            popup.Closed += result =>
             {
                 switch (result.closedBy)
                 {
@@ -133,7 +132,10 @@ internal static class ProfileSelectorInjector
                     case PopupClosedByAction.Negative:
                         SettingsApplier.Apply(profileName);
                         bypassGate = true;
-                        Reinvoke(controller, methodName);
+                        Reinvoke(menu, methodName, argument);
+                        break;
+                    case PopupClosedByAction.Abortion:
+                        Main.Logger.Log($"Load of a save using profile '{profileName}' cancelled");
                         break;
                 }
             };
@@ -144,20 +146,24 @@ internal static class ProfileSelectorInjector
         }
     }
 
-    private static bool TryGetTwoButtonPopup(ContinueLoadNewControllerSingle controller, out PopupManager pm, out Popup prefab)
+    private static bool TryGetPopup(MainMenuController menu, out PopupManager pm, out Popup prefab)
     {
-        pm = controller.FindPopupManager(ref popupManager);
-        DifficultyController? editor = Resources.FindObjectsOfTypeAll<DifficultyController>().FirstOrDefault();
-        prefab = editor != null ? editor.twoButtonPopupPrefab : null!;
-        return pm != null && prefab != null && pm.CanShowPopup();
+        pm = menu.FindPopupManager(ref popupManager);
+
+        Popup? found = Resources.FindObjectsOfTypeAll<PopupNotificationReferences>()
+            .Select(references => references.popup3Buttons)
+            .FirstOrDefault(popup => popup != null && popup.abortionButton != null);
+
+        prefab = found!;
+        return pm != null && found != null && pm.CanShowPopup();
     }
 
-    private static void Reinvoke(ContinueLoadNewControllerSingle controller, string methodName)
+    private static void Reinvoke(MainMenuController menu, string methodName, object? argument)
     {
         try
         {
-            MethodInfo? method = AccessTools.Method(typeof(ContinueLoadNewControllerSingle), methodName, [typeof(IClickable)]);
-            method?.Invoke(controller, [null]);
+            MethodInfo? method = AccessTools.Method(typeof(MainMenuController), methodName);
+            method?.Invoke(menu, [argument]);
         }
         catch (Exception ex)
         {
