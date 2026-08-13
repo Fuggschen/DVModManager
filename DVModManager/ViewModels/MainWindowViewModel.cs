@@ -1441,9 +1441,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private bool ValidateDependencies(ModItemViewModel vm)
     {
-        var allActive = ActiveMods.Select(m => m.Id).ToHashSet();
+        var allActive = ActiveMods.Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var missing = vm.Requirements
-            .Where(r => !allActive.Contains(r.Split('-')[0]))
+            .Where(r => !allActive.Contains(r))
             .ToList();
 
         if (missing.Count == 0) return true;
