@@ -15,7 +15,7 @@ jobs:
         working-directory: DVModProfiles
 
     env:
-      ReferencePath: 'C:\References\Derail Valley;C:\References\Unity'
+      ReferencePath: 'C:\References\Derail Valley\DerailValley_Data\Managed'
 
     steps:
       - name: Checkout
