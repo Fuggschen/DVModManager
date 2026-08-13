@@ -425,13 +425,15 @@ public partial class MainWindowViewModel : ViewModelBase
         var mod = SelectedMod;
         var displayName = mod.DisplayName;
 
-        // Try to auto-activate any inactive dependencies first
+        // Try to auto-activate any inactive dependencies first (recursive BFS)
+        SetBusy(_localization.GetString("status.resolving_dependencies", displayName));
         var trulyMissing = await AutoActivateDependenciesAsync(mod);
+        ClearBusy();
         if (trulyMissing.Count > 0)
         {
             mod.State = ModState.MissingDependency;
             mod.HasMissingDependency = true;
-            StatusMessage = $"Missing dependencies for {displayName}: {string.Join(", ", trulyMissing)}";
+            StatusMessage = _localization.GetString("status.missing_dependencies", displayName, string.Join(", ", trulyMissing));
             return;
         }
 
@@ -1372,8 +1374,7 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// For each required dependency: if it is already active → skip.
-    /// If it is inactive → activate it automatically.
+    /// Recursively activate all required dependencies (BFS).
     /// Returns the list of dependency IDs that could not be found at all.
     /// </summary>
     private async Task<List<string>> AutoActivateDependenciesAsync(ModItemViewModel vm)
@@ -1389,22 +1390,31 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var trulyMissing = new List<string>();
         var activated    = new List<ModItemViewModel>();
+        var processed    = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // BFS queue — seed with the direct requirements
+        var queue = new Queue<string>();
         foreach (var req in vm.Requirements)
+            queue.Enqueue(req);
+
+        while (queue.Count > 0)
         {
-            var depId = req.Split('-')[0]; // strip optional version suffix
-            if (string.IsNullOrEmpty(depId) || activeIds.Contains(depId)) continue;
+            var depId = queue.Dequeue();
+            if (string.IsNullOrEmpty(depId) || !processed.Add(depId)) continue;
+            if (activeIds.Contains(depId)) continue;
 
             if (inactiveMap.TryGetValue(depId, out var depVm))
             {
-                SetBusy($"Activating dependency {depVm.DisplayName}...");
+                BusyMessage = $"Activating dependency {depVm.DisplayName}...";
                 var ok = await _modInstall.ActivateModAsync(depVm.ModInfo, _settings.Settings.GamePath);
-                ClearBusy();
                 if (ok)
                 {
                     depVm.SyncFromModel();
                     activated.Add(depVm);
                     activeIds.Add(depId);
+                    // Enqueue this dependency's own requirements for transitive resolution
+                    foreach (var subReq in depVm.Requirements)
+                        queue.Enqueue(subReq);
                 }
                 else
                 {

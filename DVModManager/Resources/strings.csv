@@ -85,6 +85,7 @@ status.game_path_not_set,Game path not set. Open Settings to configure.,Spielpfa
 status.mods_folder_not_found,Mods folder not found: {0},Mods-Ordner nicht gefunden: {0},Dossier Mods non trouvé : {0},
 status.scan_error,Scan error: {0},Scan-Fehler: {0},Erreur de numérisation : {0},
 status.no_active_mods,No active mods.,Keine aktiven Mods.,Aucun mod actif.,
+status.resolving_dependencies,Resolving dependencies for {0}...,Löse Abhängigkeiten für {0} auf…,Résolution des dépendances pour {0}…,
 status.missing_dependencies,Missing dependencies for {0}: {1},Fehlende Abhängigkeiten für {0}: {1},Dépendances manquantes pour {0} : {1},
 status.activated,Activated: {0},Aktiviert: {0},Activé : {0},
 status.activation_failed,Failed to activate: {0},Aktivierung fehlgeschlagen: {0},Impossible d'activer : {0},
