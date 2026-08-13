@@ -201,7 +201,7 @@ public static class SettingsApplier
                 }
                 catch
                 {
-                    // Property getter threw, skip it
+                    Main.Logger.Warning($"Property access failed for {assembly.GetName()}");
                 }
             }
         }

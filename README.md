@@ -167,7 +167,7 @@ DVModProfiles/
 ```
 
 The two are deliberately kept in separate solutions. `DVModProfiles`
-and compiles against Derail Valley's shipped assemblies, so it cannot be built without
+compiles against Derail Valley's shipped assemblies, so it cannot be built without
 the game installed. See [DVModProfiles/README.md](DVModProfiles/README.md) for the
 mod's reference setup, packaging, and release process.
 
