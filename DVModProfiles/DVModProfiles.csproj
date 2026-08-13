@@ -20,49 +20,23 @@
 
 	<!-- Derail Valley -->
 	<ItemGroup>
-		<Reference Include="Assembly-CSharp">
-			<HintPath>$(ReferencePath)Assembly-CSharp.dll</HintPath>
-		</Reference>
-		<Reference Include="DV.UI">
-			<HintPath>$(ReferencePath)DV.UI.dll</HintPath>
-		</Reference>
-		<Reference Include="DV.UIFramework">
-			<HintPath>$(ReferencePath)DV.UIFramework.dll</HintPath>
-		</Reference>
-		<Reference Include="DV.Common">
-			<HintPath>$(ReferencePath)DV.Common.dll</HintPath>
-		</Reference>
-		<Reference Include="DV.Utils">
-			<HintPath>$(ReferencePath)DV.Utils.dll</HintPath>
-		</Reference>
-		<Reference Include="Newtonsoft.Json">
-			<HintPath>$(ReferencePath)Newtonsoft.Json.dll</HintPath>
-		</Reference>
-		<Reference Include="I2.Localization">
-			<HintPath>$(ReferencePath)I2.Localization.dll</HintPath>
-		</Reference>
-		<Reference Include="Facepunch.Steamworks.Win64">
-			<HintPath>$(ReferencePath)Facepunch.Steamworks.Win64.dll</HintPath>
-		</Reference>
+		<Reference Include="Assembly-CSharp"/>
+		<Reference Include="DV.UI"/>
+		<Reference Include="DV.UIFramework"/>
+		<Reference Include="DV.Common"/>
+		<Reference Include="DV.Utils"/>
+		<Reference Include="Newtonsoft.Json"/>
+		<Reference Include="I2.Localization"/>
+		<Reference Include="Facepunch.Steamworks.Win64"/>
 	</ItemGroup>
 
 	<!-- Unity -->
 	<ItemGroup>
-		<Reference Include="UnityEngine">
-			<HintPath>$(ReferencePath)UnityEngine.dll</HintPath>
-		</Reference>
-		<Reference Include="UnityEngine.CoreModule">
-			<HintPath>$(ReferencePath)UnityEngine.CoreModule.dll</HintPath>
-		</Reference>
-		<Reference Include="UnityEngine.IMGUIModule">
-			<HintPath>$(ReferencePath)UnityEngine.IMGUIModule.dll</HintPath>
-		</Reference>
-		<Reference Include="UnityEngine.UIModule">
-			<HintPath>$(ReferencePath)UnityEngine.UIModule.dll</HintPath>
-		</Reference>
-		<Reference Include="UnityEngine.UI">
-			<HintPath>$(ReferencePath)UnityEngine.UI.dll</HintPath>
-		</Reference>
+		<Reference Include="UnityEngine"/>
+		<Reference Include="UnityEngine.CoreModule"/>
+		<Reference Include="UnityEngine.IMGUIModule"/>
+		<Reference Include="UnityEngine.UIModule"/>
+		<Reference Include="UnityEngine.UI"/>
 	</ItemGroup>
 
 	<!-- Mod Loader -->
@@ -75,6 +49,14 @@
 		<PackageReference Include="Microsoft.CSharp" Version="4.7.0"/>
 		<PackageReference Include="Nullable" Version="1.3.1" PrivateAssets="all"/>
 	</ItemGroup>
+
+	<Target Name="AddGameReferencePaths" BeforeTargets="ResolveAssemblyReferences">
+		<Error Condition="'$(ReferencePath)' == ''"
+		       Text="ReferencePath is not set. Locally, create DVModProfiles/Directory.Build.targets pointing at your DerailValley_Data\Managed folder (see README). In CI, set the ReferencePath environment variable to a semicolon-separated list of reference directories."/>
+		<PropertyGroup>
+			<AssemblySearchPaths>$(ReferencePath);$(AssemblySearchPaths)</AssemblySearchPaths>
+		</PropertyGroup>
+	</Target>
 
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
 		<!-- Copy to build folder -->

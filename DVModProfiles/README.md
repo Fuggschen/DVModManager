@@ -36,6 +36,19 @@ expanded in these paths. You have to use full, absolute paths.
 </Project>
 ```
 
+`ReferencePath` is a semicolon-separated list of directories to search, not a single
+path, and the project names no per-assembly paths of its own. A normal local setup only
+needs the one `Managed` folder shown above, since the game ships its Unity assemblies
+there alongside its own. Where the references are split across several folders — as they
+are on the CI runner — list each one:
+
+```
+C:\References\Derail Valley;C:\References\Unity
+```
+
+CI sets this as a `ReferencePath` environment variable instead of a targets file. A build
+with `ReferencePath` unset fails with an explicit message saying so.
+
 ## Packaging
 
 To package a build for distribution, you can run the `package.ps1` PowerShell script in
@@ -73,6 +86,6 @@ Source code is distributed under the MIT license.
 See [LICENSE][license-url] for more information. Note that this mod carries its own
 copyright, separate from the mod manager's.
 
-[license-url]: https://github.com/SharkBaitDLS/DVModManager/blob/beta/DVModProfiles/LICENSE
+[license-url]: https://github.com/Fuggschen/DVModManager/blob/beta/DVModProfiles/LICENSE
 [references-url]: https://learn.microsoft.com/en-us/visualstudio/msbuild/customize-your-build?view=vs-2022
-[repo-url]: https://github.com/SharkBaitDLS/DVModManager
+[repo-url]: https://github.com/Fuggschen/DVModManager
