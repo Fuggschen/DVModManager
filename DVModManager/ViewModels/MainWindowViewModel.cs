@@ -31,7 +31,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _statusMessage = "Ready.";
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _busyMessage = "";
-    [ObservableProperty] private string _selectedProfileName = "Default";
+    [ObservableProperty] private string _selectedProfileName = ManagerStorage.DefaultProfileName;
     [ObservableProperty] private ObservableCollection<string> _profileNames = [];
     [ObservableProperty] private string _windowTitle = "DV Mod Manager";
     [ObservableProperty] private string _panelAvailableHeader = "Available Mods";
@@ -1246,8 +1246,8 @@ public partial class MainWindowViewModel : ViewModelBase
             var current = SelectedProfileName;
 
             ProfileNames.Clear();
-            if (!profiles.Any(p => p.Name == "Default"))
-                ProfileNames.Add("Default");
+            if (!profiles.Any(p => p.Name == ManagerStorage.DefaultProfileName))
+                ProfileNames.Add(ManagerStorage.DefaultProfileName);
             foreach (var p in profiles) ProfileNames.Add(p.Name);
 
             // Restore only if the name still exists; otherwise fall back to the active profile
@@ -1256,7 +1256,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 SelectedProfileName = current;
             else
                 SelectedProfileName = _settings.Settings.ActiveProfileName is { Length: > 0 } active
-                    && ProfileNames.Contains(active) ? active : "Default";
+                    && ProfileNames.Contains(active) ? active : ManagerStorage.DefaultProfileName;
         });
     }
 

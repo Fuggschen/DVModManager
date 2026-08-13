@@ -1,0 +1,87 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<AssemblyName>DVModProfiles</AssemblyName>
+		<TargetFramework>net48</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+		<WarningsAsErrors>CS8600;CS8602;CS8603</WarningsAsErrors>
+	</PropertyGroup>
+
+	<!--
+		The mod manager's own description of what it writes to disk and where, compiled in rather
+		than referenced so the mod still ships as a single DLL. Renaming any of it stops this build
+		too, instead of quietly stopping the mod from finding profiles at runtime.
+	-->
+	<ItemGroup>
+		<Compile Include="..\DVModManager\Models\ManagerStorage.cs" Link="Manager\ManagerStorage.cs"/>
+		<Compile Include="..\DVModManager\Models\PublicSettings.cs" Link="Manager\PublicSettings.cs"/>
+		<Compile Include="..\DVModManager\Models\ModProfile.cs" Link="Manager\ModProfile.cs"/>
+	</ItemGroup>
+
+	<!-- Derail Valley -->
+	<ItemGroup>
+		<Reference Include="Assembly-CSharp">
+			<HintPath>$(ReferencePath)Assembly-CSharp.dll</HintPath>
+		</Reference>
+		<Reference Include="DV.UI">
+			<HintPath>$(ReferencePath)DV.UI.dll</HintPath>
+		</Reference>
+		<Reference Include="DV.UIFramework">
+			<HintPath>$(ReferencePath)DV.UIFramework.dll</HintPath>
+		</Reference>
+		<Reference Include="DV.Common">
+			<HintPath>$(ReferencePath)DV.Common.dll</HintPath>
+		</Reference>
+		<Reference Include="DV.Utils">
+			<HintPath>$(ReferencePath)DV.Utils.dll</HintPath>
+		</Reference>
+		<Reference Include="Newtonsoft.Json">
+			<HintPath>$(ReferencePath)Newtonsoft.Json.dll</HintPath>
+		</Reference>
+		<Reference Include="I2.Localization">
+			<HintPath>$(ReferencePath)I2.Localization.dll</HintPath>
+		</Reference>
+		<Reference Include="Facepunch.Steamworks.Win64">
+			<HintPath>$(ReferencePath)Facepunch.Steamworks.Win64.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
+	<!-- Unity -->
+	<ItemGroup>
+		<Reference Include="UnityEngine">
+			<HintPath>$(ReferencePath)UnityEngine.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.CoreModule">
+			<HintPath>$(ReferencePath)UnityEngine.CoreModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.IMGUIModule">
+			<HintPath>$(ReferencePath)UnityEngine.IMGUIModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.UIModule">
+			<HintPath>$(ReferencePath)UnityEngine.UIModule.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.UI">
+			<HintPath>$(ReferencePath)UnityEngine.UI.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
+	<!-- Mod Loader -->
+	<ItemGroup>
+		<PackageReference Include="UnityModManager" Version="0.27.2"/>
+	</ItemGroup>
+
+	<!-- Null Checking -->
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CSharp" Version="4.7.0"/>
+		<PackageReference Include="Nullable" Version="1.3.1" PrivateAssets="all"/>
+	</ItemGroup>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<!-- Copy to build folder -->
+		<Copy SourceFiles="$(TargetPath)" DestinationFolder="build/"/>
+
+		<!-- Package after Release build -->
+		<Exec Condition="'$(ConfigurationName)' == 'Release' And '$(OS)' == 'Windows_NT'" Command="powershell -executionpolicy bypass -Command &quot;(./package.ps1)&quot;"/>
+		<Exec Condition="'$(ConfigurationName)' == 'Release' And '$(OS)' != 'Windows_NT'" Command="pwsh -Command &quot;(./package.ps1)&quot;"/>
+	</Target>
+</Project>

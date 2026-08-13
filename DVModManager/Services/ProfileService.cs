@@ -108,10 +108,10 @@ public class ProfileService : IProfileService
 
     public Task<string> GetUniqueProfileNameAsync(string name, string profilesPath)
     {
-        var safeName = string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        var safeName = Path.GetFileNameWithoutExtension(ManagerStorage.ProfileFileName(name));
         var candidate = safeName;
         var counter = 2;
-        while (File.Exists(Path.Combine(profilesPath, candidate + ".json")))
+        while (File.Exists(Path.Combine(profilesPath, ManagerStorage.ProfileFileName(candidate))))
         {
             candidate = $"{safeName} ({counter++})";
         }
@@ -167,9 +167,6 @@ public class ProfileService : IProfileService
         return new ProfileDiff(toActivate, toDeactivate, toRollback, toDownload, toRedownload);
     }
 
-    private static string GetProfileFilePath(string name, string profilesPath)
-    {
-        var safeName = string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
-        return Path.Combine(profilesPath, safeName + ".json");
-    }
+    private static string GetProfileFilePath(string name, string profilesPath) =>
+        Path.Combine(profilesPath, ManagerStorage.ProfileFileName(name));
 }

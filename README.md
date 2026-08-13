@@ -109,6 +109,22 @@ Applying a profile can trigger:
 
 > **Security note:** ZIP modpacks contain the actual mod binaries. Only import modpacks from sources you trust.
 
+### In-game profile associations
+
+The optional [DVModProfiles](DVModProfiles/README.md) mod adds a "Mod Profile" row to Derail Valley's
+save menu, listing the profiles this app has saved under `profiles/` and letting you tag each save
+with the one it belongs to. When you load a save whose profile isn't the one the app last applied,
+the mod warns you and offers to quit so you can switch profiles in the app to the correct one.
+
+The in-game menu also allows you to optionally associate UMM mod settings with a profile, so that the correct
+settings for a mod will be applied when it is loaded.
+
+### Steam Cloud sync
+
+With the mod installed and its Steam Cloud setting on, your `profiles/` files are mirrored into
+Derail Valley's cloud quota and merged onto your other machines. Steam synchronizes the files whenever the 
+the game starts or quits.
+
 ## Updates
 
 - `Check Updates` scans all detected mods.
@@ -128,6 +144,8 @@ Optional credentials in Settings:
 
 ## Repository Structure
 
+This repository contains both a desktop app (DVModManager) and an in-game supporting mod (DVModProfiles).
+
 ```text
 DVModManager.slnx
 DVModManager/
@@ -137,7 +155,21 @@ DVModManager/
   Views/
   Converters/
   Assets/
+DVModProfiles/
+  DVModProfiles.slnx
+  DVModProfiles.csproj
+  Profiles/
+  UI/
+  info.json
+  repository.json
+  package.ps1
+  deploy-debug.ps1
 ```
+
+The two are deliberately kept in separate solutions. `DVModProfiles`
+compiles against Derail Valley's shipped assemblies, so it cannot be built without
+the game installed. See [DVModProfiles/README.md](DVModProfiles/README.md) for the
+mod's reference setup, packaging, and release process.
 
 ## Contributing
 
@@ -156,12 +188,21 @@ Requirements:
 - .NET SDK 8.0+
 - Derail Valley install for local testing
 
-Build and run from repository root:
+Build and run the manager from repository root:
 
 ```bash
 dotnet restore
 dotnet build DVModManager/DVModManager.csproj
 dotnet run --project DVModManager/DVModManager.csproj
+```
+
+Building the in-game mod additionally requires Derail Valley installed and a
+`DVModProfiles/Directory.Build.targets` pointing at the game's `Managed` folder (see
+[DVModProfiles/README.md](DVModProfiles/README.md)). It is not part of the manager's
+solution, so build it explicitly:
+
+```bash
+dotnet build DVModProfiles/DVModProfiles.csproj -c Release
 ```
 
 ### Publishing (for maintainers/contributors)
