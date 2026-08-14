@@ -23,18 +23,31 @@
                                FontWeight="SemiBold"
                                Foreground="#cdd6f4"
                                VerticalAlignment="Center" />
-                    <Button Grid.Column="1"
-                            Command="{Binding AddGroupCommand}"
-                            CommandParameter="{Binding #Root.Panel}"
-                            Content="{conv:Localize button.add_group}"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Foreground="#89b4fa"
-                            FontSize="12"
-                            Padding="6,2"
-                            ToolTip.Tip="{conv:Localize button.add_group}"
-                            Cursor="Hand"
-                            VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="4"
+                                VerticalAlignment="Center">
+                        <Button Command="{Binding InstallCompanionModCommand}"
+                                Content="{Binding CompanionButtonContent}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="#89b4fa"
+                                FontSize="12"
+                                Padding="6,2"
+                                ToolTip.Tip="{conv:Localize button.companion.tooltip}"
+                                Cursor="Hand"
+                                IsVisible="{Binding #Root.ShowCompanionButton}" />
+                        <Button Command="{Binding AddGroupCommand}"
+                                CommandParameter="{Binding #Root.Panel}"
+                                Content="{conv:Localize button.add_group}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="#89b4fa"
+                                FontSize="12"
+                                Padding="6,2"
+                                ToolTip.Tip="{conv:Localize button.add_group}"
+                                Cursor="Hand" />
+                    </StackPanel>
                 </Grid>
             </Border>
 

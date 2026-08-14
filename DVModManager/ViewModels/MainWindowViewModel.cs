@@ -37,6 +37,38 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _panelAvailableHeader = "Available Mods";
     [ObservableProperty] private string _panelActiveHeader = "Active Mods";
 
+    // ── Companion mod state ───────────────────────────────────────────────────
+    private const string CompanionModId = "DVModProfiles";
+    private const string CompanionModRepository = "https://raw.githubusercontent.com/Fuggschen/DVModManager/beta/DVModProfiles/repository.json";
+
+    [ObservableProperty] private bool _isCompanionModInstalled;
+    [ObservableProperty] private bool _isCompanionModInactive;
+    [ObservableProperty] private string _companionButtonKey = "button.install_companion";
+
+    /// <summary>Localized text for the companion button (computed from CompanionButtonKey).</summary>
+    public string CompanionButtonContent => _localization.GetString(CompanionButtonKey);
+
+    partial void OnCompanionButtonKeyChanged(string value)
+    {
+        OnPropertyChanged(nameof(CompanionButtonContent));
+    }
+
+    /// <summary>Checks whether the companion mod exists in either available or active mods.</summary>
+    private void UpdateCompanionModState()
+    {
+        var companion = AvailableMods.Concat(ActiveMods)
+            .FirstOrDefault(m => string.Equals(m.Id, CompanionModId, StringComparison.OrdinalIgnoreCase));
+        IsCompanionModInstalled = companion != null;
+        IsCompanionModInactive = companion != null && !companion.IsActive;
+        CompanionButtonKey = companion switch
+        {
+            null => "button.install_companion",
+            { IsActive: true } => "button.activated_companion",
+            _ => "button.activate_companion"
+        };
+        InstallCompanionModCommand.NotifyCanExecuteChanged();
+    }
+
     // ── Version history for selected mod ──────────────────────────────────────
     [ObservableProperty] private IReadOnlyList<ModVersion> _selectedModVersionHistory = [];
     [ObservableProperty] private ModVersion? _selectedHistoryVersion;
@@ -622,6 +654,111 @@ public partial class MainWindowViewModel : ViewModelBase
         else
         {
             StatusMessage = _localization.GetString("status.install_failed");
+        }
+    }
+
+    private bool CanInstallCompanion() => !IsCompanionModInstalled || IsCompanionModInactive;
+
+    private void RecheckCompanionCanExecute()
+    {
+        // Called after UpdateCompanionModState to sync command availability
+        InstallCompanionModCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Downloads the latest release of the companion mod (DVModProfiles) from GitHub,
+    /// installs it into the game, and activates it.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanInstallCompanion))]
+    private async Task InstallCompanionModAsync()
+    {
+        if (_settings.Settings.GamePath == null) return;
+
+        // If companion is installed but inactive, just activate it
+        if (IsCompanionModInactive)
+        {
+            var companion = AvailableMods.Concat(ActiveMods)
+                .FirstOrDefault(m => string.Equals(m.Id, CompanionModId, StringComparison.OrdinalIgnoreCase));
+            if (companion != null)
+            {
+                SetBusy(_localization.GetString("busy.activating_companion"));
+                var ok = await _modInstall.ActivateModAsync(companion.ModInfo, _settings.Settings.GamePath);
+                if (ok)
+                {
+                    companion.SyncFromModel();
+                    MoveToActive(companion);
+                    StatusMessage = _localization.GetString("status.companion_activated");
+                }
+                else
+                {
+                    StatusMessage = _localization.GetString("status.activation_failed", companion.DisplayName);
+                }
+                UpdateCompanionModState();
+                ClearBusy();
+            }
+            return;
+        }
+
+        // Otherwise, download and install
+        SetBusy(_localization.GetString("busy.installing_companion"));
+
+        try
+        {
+            // Resolve the latest release download URL via the update service
+            var stub = new ModInfo
+            {
+                Id = CompanionModId,
+                Version = "0.0.0",
+                Repository = CompanionModRepository
+            };
+
+            using var resolveCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var updateInfo = await _updateService.CheckUpdateAsync(stub, resolveCts.Token);
+            if (updateInfo?.DownloadUrl == null)
+            {
+                ClearBusy();
+                StatusMessage = _localization.GetString("status.companion_install_failed");
+                return;
+            }
+
+            var progress = new Progress<double>(p =>
+                BusyMessage = _localization.GetString("busy.downloading_mod", CompanionModId) + $" {p:P0}");
+
+            var result = await _modInstall.DownloadAndInstallFromUrlAsync(
+                updateInfo.DownloadUrl, _settings.Settings.GamePath, _settings.Settings.StoragePath,
+                progress);
+
+            if (result == null)
+            {
+                ClearBusy();
+                StatusMessage = _localization.GetString("status.companion_install_failed");
+                return;
+            }
+
+            // Refresh so the mod appears in the lists
+            await RefreshModsAsync();
+
+            // Auto-activate the companion mod
+            var companion = AvailableMods.Concat(ActiveMods)
+                .FirstOrDefault(m => string.Equals(m.Id, CompanionModId, StringComparison.OrdinalIgnoreCase));
+            if (companion != null && !companion.IsActive)
+            {
+                BusyMessage = _localization.GetString("busy.activating_companion");
+                var ok = await _modInstall.ActivateModAsync(companion.ModInfo, _settings.Settings.GamePath);
+                if (ok)
+                {
+                    companion.SyncFromModel();
+                    MoveToActive(companion);
+                }
+            }
+
+            ClearBusy();
+            StatusMessage = _localization.GetString("status.companion_installed");
+        }
+        catch
+        {
+            ClearBusy();
+            StatusMessage = _localization.GetString("status.companion_install_failed");
         }
     }
 
@@ -1229,6 +1366,7 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             ApplyFilters();
+            UpdateCompanionModState();
 
             var active = mods.Count(m => m.IsActive);
             var inactive = mods.Count(m => !m.IsActive);
@@ -1336,6 +1474,7 @@ public partial class MainWindowViewModel : ViewModelBase
             UpdateAllModsCommand.NotifyCanExecuteChanged();
             ApplyProfileCommand.NotifyCanExecuteChanged();
             RemoveSelectedModCommand.NotifyCanExecuteChanged();
+            InstallCompanionModCommand.NotifyCanExecuteChanged();
         });
     }
 

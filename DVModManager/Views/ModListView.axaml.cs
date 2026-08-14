@@ -31,6 +31,9 @@ public partial class ModListView : UserControl
     public static readonly StyledProperty<string> PanelProperty =
         AvaloniaProperty.Register<ModListView, string>(nameof(Panel), "");
 
+    public static readonly StyledProperty<bool> ShowCompanionButtonProperty =
+        AvaloniaProperty.Register<ModListView, bool>(nameof(ShowCompanionButton), false);
+
     public string Header
     {
         get => GetValue(HeaderProperty);
@@ -59,6 +62,12 @@ public partial class ModListView : UserControl
     {
         get => GetValue(PanelProperty);
         set => SetValue(PanelProperty, value);
+    }
+
+    public bool ShowCompanionButton
+    {
+        get => GetValue(ShowCompanionButtonProperty);
+        set => SetValue(ShowCompanionButtonProperty, value);
     }
 
     // ── Drag state ────────────────────────────────────────────────────────────

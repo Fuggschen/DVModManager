@@ -170,7 +170,8 @@
                                Mods="{Binding FilteredActiveMods}"
                                Filter="{Binding ActiveFilter, Mode=TwoWay}"
                                SelectedMod="{Binding SelectedMod, Mode=TwoWay}"
-                               Panel="active" />
+                               Panel="active"
+                               ShowCompanionButton="True" />
 
             <!-- Splitter -->
             <GridSplitter Grid.Column="3"
