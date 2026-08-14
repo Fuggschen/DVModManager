@@ -1,0 +1,34 @@
+## Build results
+[Bb]in/
+[Oo]bj/
+publish/
+
+## DVModProfiles compilation artifacts
+DVModProfiles/build/
+DVModProfiles/dist/
+Directory.Build.targets
+
+## User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## VS Code
+.vscode/
+
+## Visual Studio
+.vs/
+
+## Rider
+.idea/
+
+## NuGet
+*.nupkg
+**/packages/
+
+## OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store

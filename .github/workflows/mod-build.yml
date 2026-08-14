@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main, beta]
+  pull_request:
+    branches: [main, beta]
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows]
+
+    defaults:
+      run:
+        working-directory: DVModProfiles
+
+    env:
+      ReferencePath: 'C:\References\Derail Valley\DerailValley_Data\Managed'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Restore
+        run: dotnet restore DVModProfiles.csproj
+
+      - name: Lint
+        run: dotnet format DVModProfiles.csproj --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build DVModProfiles.csproj -c Release --no-restore

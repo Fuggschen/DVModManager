@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags: ['dvmodmanager-v*']
+
+env:
+  IS_BETA: ${{ contains(github.ref, '-beta') }}
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rid: [win-x64, linux-x64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish (${{ matrix.rid }})
+        run: dotnet publish DVModManager/DVModManager.csproj -c Release -r ${{ matrix.rid }} -o publish/${{ matrix.rid }}
+
+      - name: Package
+        run: |
+          cd publish/${{ matrix.rid }}
+          zip -r ../../DVModManager-${{ matrix.rid }}.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DVModManager-${{ matrix.rid }}
+          path: DVModManager-${{ matrix.rid }}.zip
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" artifacts/*/*.zip \
+            --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            --draft="$IS_BETA" \
+            --prerelease="$IS_BETA"
