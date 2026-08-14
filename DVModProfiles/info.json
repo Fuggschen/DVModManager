@@ -1,9 +1,10 @@
 {
 	"Id": "DVModProfiles",
-	"Version": "1.0.0",
+	"Version": "1.0.1",
 	"DisplayName": "DV Mod Profiles",
 	"Author": "SharkBaitDLS",
 	"EntryMethod": "DVModProfiles.Main.Load",
 	"ManagerVersion": "0.27.2",
-	"Repository": "https://raw.githubusercontent.com/Fuggschen/DVModManager/main/DVModProfiles/repository.json"
+	"Repository": "https://raw.githubusercontent.com/Fuggschen/DVModManager/main/DVModProfiles/repository.json",
+	"MultiplayerCompatibility": "Client"
 }
