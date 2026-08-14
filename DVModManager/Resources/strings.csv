@@ -96,6 +96,7 @@ status.deactivation_failed,Failed to deactivate: {0},Deaktivierung fehlgeschlage
 status.deactivated_count,Deactivated {0}/{1} mod(s) in group ''{2}''.,"{0}/{1} Mod(s) in Gruppe „{2}"" deaktiviert.",{0}/{1} mod(s) désactivé(s) dans le groupe « {2} ».,
 status.install_success,Installed: {0},Installiert: {0},Installé : {0},
 status.install_failed,"Install failed. Ensure the archive contains Info.json.","Installation fehlgeschlagen. Stellen Sie sicher, dass das Archiv Info.json enthält.","Échec de l'installation. Assurez-vous que l'archive contient Info.json.",
+status.install_multi_result,"Installed {0}/{1} mod(s) ({2} failed).","{0}/{1} Mod(s) installiert ({2} fehlgeschlagen).","{0}/{1} mod(s) installé(s) ({2} échoué(s)).",
 status.uninstalled,Uninstalled: {0},Deinstalliert: {0},Désinstallé : {0},
 status.checking_updates,Checking for updates...,Auf Updates wird überprüft...,Vérification des mises à jour…,
 status.updates_available,{0} update(s) available.,{0} Update(s) verfügbar.,{0} mise(s) à jour disponible(s).,

@@ -54,6 +54,28 @@ public class DialogService : IDialogService
         return files.Count > 0 ? files[0].Path.LocalPath : null;
     }
 
+    public async Task<IReadOnlyList<string>> OpenFilesAsync(string title, string filterName, string[] extensions)
+    {
+        if (_owner == null) return [];
+        var provider = TopLevel.GetTopLevel(_owner)?.StorageProvider;
+        if (provider == null) return [];
+
+        var files = await provider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = true,
+            FileTypeFilter =
+            [
+                new FilePickerFileType(filterName)
+                {
+                    Patterns = extensions.Select(e => e.StartsWith("*.") ? e : "*." + e.TrimStart('.')).ToList()
+                }
+            ]
+        });
+
+        return files.Select(f => f.Path.LocalPath).ToList();
+    }
+
     public async Task<string?> SaveFileAsync(string title, string filterName, string[] extensions, string defaultName)
     {
         if (_owner == null) return null;

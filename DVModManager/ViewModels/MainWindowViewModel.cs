@@ -570,19 +570,17 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanModify))]
     private async Task InstallModFromFileAsync()
     {
-        var path = await _dialogService.OpenFileAsync(
+        var paths = await _dialogService.OpenFilesAsync(
             _localization.GetString("install.button.tooltip"),
             "Mod Archives & Profiles", ["zip", "json"]);
-        if (path == null || _settings.Settings.GamePath == null) return;
+        if (paths.Count == 0 || _settings.Settings.GamePath == null) return;
 
-        var ext = Path.GetExtension(path).ToLowerInvariant();
-
-        // ── JSON profile import ────────────────────────────────────────────
-        if (ext == ".json")
+        // If a single JSON file was selected, treat as profile import
+        if (paths.Count == 1 && Path.GetExtension(paths[0]).Equals(".json", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
-                var profile = await _profileService.ImportProfileAsync(path);
+                var profile = await _profileService.ImportProfileAsync(paths[0]);
                 var uniqueName = await _profileService.GetUniqueProfileNameAsync(
                     profile.Name, _settings.Settings.ProfilesPath);
                 profile.Name = uniqueName;
@@ -597,86 +595,107 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        // ── ZIP: check for profile.json inside → modpack import ───────────
-        ModProfile? embeddedProfile = null;
-        try
-        {
-            using var zip = System.IO.Compression.ZipFile.OpenRead(path);
-            var profileEntry = zip.Entries.FirstOrDefault(e =>
-                string.Equals(e.FullName, "profile.json", StringComparison.OrdinalIgnoreCase));
-            if (profileEntry != null)
-            {
-                using var sr = new System.IO.StreamReader(profileEntry.Open());
-                var json = await sr.ReadToEndAsync();
-                embeddedProfile = System.Text.Json.JsonSerializer.Deserialize<ModProfile>(json);
-            }
-        }
-        catch { /* not a valid zip or no profile — fall through to normal install */ }
+        // Filter to only .zip files
+        var zipPaths = paths.Where(p => Path.GetExtension(p).Equals(".zip", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (zipPaths.Count == 0) return;
 
-        if (embeddedProfile != null)
+        // ── Single ZIP: check for profile.json inside → modpack import ───
+        if (zipPaths.Count == 1)
         {
-            var confirmed = await _dialogService.ShowModpackImportConfirmAsync(
-                _localization.GetString("import.modpack.title"), embeddedProfile);
-            if (!confirmed) return;
-
-            SetBusy(_localization.GetString("import.modpack.title") + "…");
+            ModProfile? embeddedProfile = null;
             try
             {
-                var tempDir = Path.Combine(Path.GetTempPath(), "dvmm_modpack_" + Guid.NewGuid());
+                using var zip = System.IO.Compression.ZipFile.OpenRead(zipPaths[0]);
+                var profileEntry = zip.Entries.FirstOrDefault(e =>
+                    string.Equals(e.FullName, "profile.json", StringComparison.OrdinalIgnoreCase));
+                if (profileEntry != null)
+                {
+                    using var sr = new System.IO.StreamReader(profileEntry.Open());
+                    var json = await sr.ReadToEndAsync();
+                    embeddedProfile = System.Text.Json.JsonSerializer.Deserialize<ModProfile>(json);
+                }
+            }
+            catch { /* not a valid zip or no profile — fall through to normal install */ }
+
+            if (embeddedProfile != null)
+            {
+                var confirmed = await _dialogService.ShowModpackImportConfirmAsync(
+                    _localization.GetString("import.modpack.title"), embeddedProfile);
+                if (!confirmed) return;
+
+                SetBusy(_localization.GetString("import.modpack.title") + "…");
                 try
                 {
-                    await Task.Run(() =>
-                        System.IO.Compression.ZipFile.ExtractToDirectory(path, tempDir, overwriteFiles: true));
-
-                    var modsDir = Path.Combine(tempDir, "mods");
-                    if (Directory.Exists(modsDir))
+                    var tempDir = Path.Combine(Path.GetTempPath(), "dvmm_modpack_" + Guid.NewGuid());
+                    try
                     {
-                        foreach (var modFolder in Directory.GetDirectories(modsDir))
-                        {
-                            await _modInstall.InstallFromFolderAsync(
-                                modFolder,
-                                _settings.Settings.GamePath,
-                                _settings.Settings.StoragePath,
-                                activate: false);
-                        }
-                    }
+                        await Task.Run(() =>
+                            System.IO.Compression.ZipFile.ExtractToDirectory(zipPaths[0], tempDir, overwriteFiles: true));
 
-                    var uniqueName = await _profileService.GetUniqueProfileNameAsync(
-                        embeddedProfile.Name, _settings.Settings.ProfilesPath);
-                    embeddedProfile.Name = uniqueName;
-                    await _profileService.SaveProfileAsync(embeddedProfile, _settings.Settings.ProfilesPath);
-                    await RefreshModsAsync();
-                    await RefreshProfileListAsync();
-                    StatusMessage = _localization.GetString("status.modpack_imported", uniqueName);
+                        var modsDir = Path.Combine(tempDir, "mods");
+                        if (Directory.Exists(modsDir))
+                        {
+                            foreach (var modFolder in Directory.GetDirectories(modsDir))
+                            {
+                                await _modInstall.InstallFromFolderAsync(
+                                    modFolder,
+                                    _settings.Settings.GamePath,
+                                    _settings.Settings.StoragePath,
+                                    activate: false);
+                            }
+                        }
+
+                        var uniqueName = await _profileService.GetUniqueProfileNameAsync(
+                            embeddedProfile.Name, _settings.Settings.ProfilesPath);
+                        embeddedProfile.Name = uniqueName;
+                        await _profileService.SaveProfileAsync(embeddedProfile, _settings.Settings.ProfilesPath);
+                        await RefreshModsAsync();
+                        await RefreshProfileListAsync();
+                        StatusMessage = _localization.GetString("status.modpack_imported", uniqueName);
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
                 }
-                finally
+                catch
                 {
-                    try { Directory.Delete(tempDir, true); } catch { }
+                    ClearBusy();
+                    StatusMessage = _localization.GetString("status.modpack_import_failed");
                 }
-            }
-            catch
-            {
                 ClearBusy();
-                StatusMessage = _localization.GetString("status.modpack_import_failed");
+                return;
             }
-            ClearBusy();
-            return;
         }
 
-        // ── Regular mod archive install ────────────────────────────────────
-        SetBusy("Installing mod...");
-        var mod = await _modInstall.InstallFromArchiveAsync(
-            path, _settings.Settings.GamePath, _settings.Settings.StoragePath);
+        // ── Regular mod archive install (one or multiple) ─────────────────
+        var installedNames = new List<string>();
+        var failedCount = 0;
+
+        foreach (var zipPath in zipPaths)
+        {
+            SetBusy(_localization.GetString("busy.installing_mod", Path.GetFileName(zipPath)));
+            var mod = await _modInstall.InstallFromArchiveAsync(
+                zipPath, _settings.Settings.GamePath, _settings.Settings.StoragePath);
+            if (mod != null)
+                installedNames.Add(mod.EffectiveDisplayName);
+            else
+                failedCount++;
+        }
+
+        await RefreshModsAsync();
         ClearBusy();
 
-        if (mod != null)
+        if (zipPaths.Count == 1)
         {
-            await RefreshModsAsync();
-            StatusMessage = _localization.GetString("status.install_success", mod.EffectiveDisplayName);
+            StatusMessage = installedNames.Count > 0
+                ? _localization.GetString("status.install_success", installedNames[0])
+                : _localization.GetString("status.install_failed");
         }
         else
         {
-            StatusMessage = _localization.GetString("status.install_failed");
+            StatusMessage = _localization.GetString("status.install_multi_result",
+                installedNames.Count, zipPaths.Count, failedCount);
         }
     }
 
