@@ -145,9 +145,9 @@ public class DialogService : IDialogService
         return result;
     }
 
-    private static Avalonia.Controls.Control BuildMessageContent(string message, Action<bool>? closeCallback)
+    private Avalonia.Controls.Control BuildMessageContent(string message, Action<bool>? closeCallback)
     {
-        var btn = new Button { Content = "OK", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center };
+        var btn = new Button { Content = _loc.GetString("dialog.button.ok"), HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center };
         btn.Click += (_, _) => closeCallback?.Invoke(true);
 
         return new StackPanel
@@ -166,10 +166,10 @@ public class DialogService : IDialogService
         };
     }
 
-    private static Avalonia.Controls.Control BuildConfirmContent(string message, Action<bool> callback)
+    private Avalonia.Controls.Control BuildConfirmContent(string message, Action<bool> callback)
     {
-        var okBtn = new Button { Content = "Yes", Width = 80 };
-        var cancelBtn = new Button { Content = "No", Width = 80 };
+        var okBtn = new Button { Content = _loc.GetString("dialog.button.yes"), Width = 80 };
+        var cancelBtn = new Button { Content = _loc.GetString("dialog.button.no"), Width = 80 };
 
         okBtn.Click += (_, _) => callback(true);
         cancelBtn.Click += (_, _) => callback(false);
@@ -322,8 +322,8 @@ public class DialogService : IDialogService
         bool openNexus = false;
         var tcs = new TaskCompletionSource<bool>();
 
-        var nexusBtn = new Button { Content = "Open on Nexus", Width = 130 };
-        var cancelBtn = new Button { Content = "Cancel", Width = 80 };
+        var nexusBtn = new Button { Content = _loc.GetString("button.open_on_nexus"), Width = 130 };
+        var cancelBtn = new Button { Content = _loc.GetString("settings.button.cancel"), Width = 80 };
 
         nexusBtn.Click += (_, _) => { openNexus = true; tcs.TrySetResult(true); };
         cancelBtn.Click += (_, _) => { openNexus = false; tcs.TrySetResult(false); };
@@ -337,18 +337,18 @@ public class DialogService : IDialogService
         };
 
         int nexusCount = failedMods.Count(m => !string.IsNullOrEmpty(m.HomePageUrl));
-        nexusBtn.Content = nexusCount > 0 ? $"Open on Nexus ({nexusCount})" : "Open on Nexus";
+        nexusBtn.Content = nexusCount > 0 ? _loc.GetString("button.open_on_nexus_count", nexusCount) : _loc.GetString("button.open_on_nexus");
         nexusBtn.Width = double.NaN; // auto-width to fit content
 
         var lines = new System.Text.StringBuilder();
-        lines.AppendLine("The following mods could not be downloaded from GitHub:");
+        lines.AppendLine(_loc.GetString("dialog.failed_downloads_message"));
         foreach (var (modId, homePageUrl) in failedMods)
         {
             bool hasLink = !string.IsNullOrEmpty(homePageUrl);
-            lines.AppendLine(hasLink ? $"  \u2022 {modId}" : $"  \u2022 {modId}  (no link available)");
+            lines.AppendLine(hasLink ? $"  \u2022 {modId}" : _loc.GetString("dialog.failed_download_no_link", modId));
         }
         if (nexusCount > 0)
-            lines.AppendLine($"\nClick \"Open on Nexus ({nexusCount})\" to open their pages in the browser.");
+            lines.AppendLine("\n" + _loc.GetString("dialog.failed_download_open_hint", nexusCount));
         else
             nexusBtn.IsEnabled = false;
 

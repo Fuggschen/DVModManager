@@ -137,7 +137,7 @@
                                            FontSize="11"
                                            VerticalAlignment="Center"
                                            Margin="6,0"
-                                           Text="{Binding ModCount, StringFormat={}{0} mod(s)}" />
+                                           Text="{Binding ModCountLabel}" />
 
                                 <!-- Rename + Delete buttons -->
                                 <StackPanel Grid.Column="3"

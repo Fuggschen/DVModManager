@@ -81,14 +81,15 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task BrowseGamePathAsync()
     {
-        var path = await _dialogService.PickFolderAsync("Select Derail Valley folder");
+        var path = await _dialogService.PickFolderAsync(_localization!.GetString("dialog.select_game_folder_short"));
         if (path == null) return;
 
         if (_gameDetection.ValidateGamePath(path))
             GamePath = path;
         else
-            await _dialogService.ShowMessageAsync("Invalid Path",
-                "The selected folder does not appear to be a Derail Valley installation.");
+            await _dialogService.ShowMessageAsync(
+                _localization.GetString("dialog.invalid_path_title"),
+                _localization.GetString("dialog.invalid_path_message"));
     }
 
     [RelayCommand]
@@ -98,14 +99,15 @@ public partial class SettingsViewModel : ViewModelBase
         if (path != null)
             GamePath = path;
         else
-            await _dialogService.ShowMessageAsync("Not Found",
-                "Could not auto-detect Derail Valley. Please select the folder manually.");
+            await _dialogService.ShowMessageAsync(
+                _localization!.GetString("dialog.game_not_found_title"),
+                _localization.GetString("dialog.game_not_found_message"));
     }
 
     [RelayCommand]
     private async Task BrowseStoragePathAsync()
     {
-        var path = await _dialogService.PickFolderAsync("Select storage folder");
+        var path = await _dialogService.PickFolderAsync(_localization!.GetString("dialog.select_storage_folder"));
         if (path != null) StoragePath = path;
     }
 

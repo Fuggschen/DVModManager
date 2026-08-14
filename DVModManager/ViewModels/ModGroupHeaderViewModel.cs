@@ -1,5 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DVModManager.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DVModManager.ViewModels;
 
@@ -9,6 +11,7 @@ public partial class ModGroupHeaderViewModel : ViewModelBase
     private readonly Func<string, string, Task> _onRename;        // (groupId, newName)
     private readonly Func<string, Task> _onDelete;                 // (groupId)
     private readonly Func<string, bool, string, Task> _onToggle;  // (groupId, isCollapsed, panel)
+    private readonly ILocalizationService? _localization;
 
     [ObservableProperty] private string _groupId = "";
     [ObservableProperty] private string _name = "";
@@ -39,7 +42,28 @@ public partial class ModGroupHeaderViewModel : ViewModelBase
         _onRename    = onRename;
         _onDelete    = onDelete;
         _onToggle    = onToggle;
+
+        try
+        {
+            _localization = App.Services.GetService(typeof(ILocalizationService)) as ILocalizationService;
+            if (_localization != null)
+                _localization.LanguageChanged += (_, _) => OnPropertyChanged(nameof(ModCountLabel));
+        }
+        catch { }
     }
+
+    /// <summary>Localized mod count label (e.g. "3 mod(s)").</summary>
+    public string ModCountLabel
+    {
+        get
+        {
+            if (_localization != null)
+                return _localization.GetString("group.mod_count_format", ModCount);
+            return $"{ModCount} mod(s)";
+        }
+    }
+
+    partial void OnModCountChanged(int value) => OnPropertyChanged(nameof(ModCountLabel));
 
     [RelayCommand]
     private async Task ToggleCollapseAsync()

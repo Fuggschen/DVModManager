@@ -242,7 +242,7 @@
                                Foreground="#fab387"
                                IsVisible="{Binding HasManagerUpdate}"
                                Cursor="Hand"
-                               ToolTip.Tip="Click to open release page"
+                                ToolTip.Tip="{conv:Localize tooltip.click_release_page}"
                                PointerPressed="OnUpdateLabelPressed" />
 
                     <!-- Busy indicator (overlaid on version when busy) -->

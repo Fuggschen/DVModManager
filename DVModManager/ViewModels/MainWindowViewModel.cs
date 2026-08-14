@@ -30,7 +30,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private ModItemViewModel? _selectedMod;
     [ObservableProperty] private ModGroupHeaderViewModel? _selectedGroup;
     [ObservableProperty] private bool _isGameRunning;
-    [ObservableProperty] private string _statusMessage = "Ready.";
+    [ObservableProperty] private string _statusMessage = "";
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _busyMessage = "";
     [ObservableProperty] private string _selectedProfileName = ManagerStorage.DefaultProfileName;
@@ -278,7 +278,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task AddGroupAsync(string? panel)
     {
-        var group = new ModGroup { Id = Guid.NewGuid().ToString(), Name = "New Group", Panel = panel };
+        var group = new ModGroup { Id = Guid.NewGuid().ToString(), Name = _localization.GetString("dialog.new_group"), Panel = panel };
         _settings.Settings.ModGroups.Add(group);
         await _settings.SaveAsync();
         ApplyGroupedFilters();
@@ -421,7 +421,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var checkedTargets = AvailableMods.Where(m => m.IsChecked).ToList();
         if (checkedTargets.Count >= 2)
         {
-            SetBusy($"Activating {checkedTargets.Count} mod(s)...");
+            SetBusy(_localization.GetString("status.activating_group", checkedTargets.Count));
             int activated = 0;
             var missingDeps = new List<string>();
             foreach (var target in checkedTargets)
@@ -439,8 +439,8 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             ClearBusy();
             StatusMessage = missingDeps.Count > 0
-                ? $"Activated {activated}/{checkedTargets.Count} — missing deps: {string.Join("; ", missingDeps)}"
-                : $"Activated {activated}/{checkedTargets.Count} mod(s).";
+                ? _localization.GetString("status.activated_simple_missing_deps", activated, checkedTargets.Count, string.Join("; ", missingDeps))
+                : _localization.GetString("status.activated_simple", activated, checkedTargets.Count);
             return;
         }
 
@@ -451,7 +451,7 @@ public partial class MainWindowViewModel : ViewModelBase
             if (group == null) return;
             var targets = AvailableMods.Where(m => group.ModIds.Contains(m.Id)).ToList();
             if (targets.Count == 0) return;
-            SetBusy($"Activating {targets.Count} mod(s)...");
+            SetBusy(_localization.GetString("status.activating_group", targets.Count));
             int activated = 0;
             var missingDeps = new List<string>();
             foreach (var target in targets)
@@ -469,8 +469,8 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             ClearBusy();
             StatusMessage = missingDeps.Count > 0
-                ? $"Activated {activated}/{targets.Count} — missing deps: {string.Join("; ", missingDeps)}"
-                : $"Activated {activated}/{targets.Count} mod(s) in group '{group.Name}'.";
+                ? _localization.GetString("status.activated_simple_missing_deps", activated, targets.Count, string.Join("; ", missingDeps))
+                : _localization.GetString("status.activated_count", activated, targets.Count, group.Name);
             return;
         }
 
@@ -492,7 +492,7 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        SetBusy($"Activating {displayName}...");
+        SetBusy(_localization.GetString("status.activating_mod", displayName));
         var ok = await _modInstall.ActivateModAsync(mod.ModInfo, _settings.Settings.GamePath);
         ClearBusy();
 
@@ -517,7 +517,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var checkedTargets = ActiveMods.Where(m => m.IsChecked).ToList();
         if (checkedTargets.Count >= 2)
         {
-            SetBusy($"Deactivating {checkedTargets.Count} mod(s)...");
+            SetBusy(_localization.GetString("status.deactivating_group", checkedTargets.Count));
             int deactivated = 0;
             foreach (var target in checkedTargets)
             {
@@ -525,7 +525,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 if (success) { target.SyncFromModel(); MoveToInactive(target); deactivated++; }
             }
             ClearBusy();
-            StatusMessage = $"Deactivated {deactivated}/{checkedTargets.Count} mod(s).";
+            StatusMessage = _localization.GetString("status.deactivated_simple", deactivated, checkedTargets.Count);
             return;
         }
 
@@ -536,7 +536,7 @@ public partial class MainWindowViewModel : ViewModelBase
             if (group == null) return;
             var targets = ActiveMods.Where(m => group.ModIds.Contains(m.Id)).ToList();
             if (targets.Count == 0) return;
-            SetBusy($"Deactivating {targets.Count} mod(s)...");
+            SetBusy(_localization.GetString("status.deactivating_group", targets.Count));
             int deactivated = 0;
             foreach (var target in targets)
             {
@@ -550,7 +550,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (SelectedMod == null) return;
 
-        SetBusy($"Deactivating {SelectedMod.DisplayName}...");
+        SetBusy(_localization.GetString("status.deactivating_mod", SelectedMod.DisplayName));
         var success2 = await _modInstall.DeactivateModAsync(SelectedMod.ModInfo, _settings.Settings.GamePath);
         ClearBusy();
 
@@ -572,7 +572,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         var paths = await _dialogService.OpenFilesAsync(
             _localization.GetString("install.button.tooltip"),
-            "Mod Archives & Profiles", ["zip", "json"]);
+            _localization.GetString("file.filter.mod_archives"), ["zip", "json"]);
         if (paths.Count == 0 || _settings.Settings.GamePath == null) return;
 
         // If a single JSON file was selected, treat as profile import
@@ -902,12 +902,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var displayName = SelectedMod.DisplayName;
         var confirmed = await _dialogService.ConfirmAsync(
-            "Uninstall Mod",
-            $"Remove '{displayName}'? The current version will be archived for rollback, then deleted.");
+            _localization.GetString("dialog.uninstall_title"),
+            _localization.GetString("dialog.uninstall_message", displayName));
 
         if (!confirmed) return;
 
-        SetBusy($"Uninstalling {displayName}...");
+        SetBusy(_localization.GetString("busy.uninstalling_mod", displayName));
         var success = await _modInstall.UninstallModAsync(
             SelectedMod.ModInfo, _settings.Settings.GamePath, _settings.Settings.StoragePath, hardDelete: false);
         ClearBusy();
@@ -937,7 +937,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var allMods = AvailableMods.Concat(ActiveMods).Select(v => v.ModInfo).ToList();
         if (allMods.Count == 0) return;
 
-        SetBusy("Checking for updates...");
+        SetBusy(_localization.GetString("status.checking_updates"));
         var updates = await _updateService.CheckAllUpdatesAsync(allMods);
         ClearBusy();
 
@@ -971,7 +971,7 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        SetBusy($"Updating {displayName} to v{update.LatestVersion}...");
+        SetBusy(_localization.GetString("status.updating", displayName, update.LatestVersion));
         var progress = new Progress<double>(p =>
             BusyMessage = _localization.GetString("busy.update_progress", displayName, p));
         var success = await _modInstall.UpdateModAsync(
@@ -1006,14 +1006,15 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        var confirmed = await _dialogService.ConfirmAsync("Update All",
-            $"Update {modsWithUpdates.Count} mod(s)? Current versions will be archived.");
+        var confirmed = await _dialogService.ConfirmAsync(
+            _localization.GetString("dialog.update_all_title"),
+            _localization.GetString("dialog.update_all_message", modsWithUpdates.Count));
         if (!confirmed) return;
 
         // Backup first
         if (_settings.Settings.GamePath != null && _settings.Settings.BackupBeforeChanges)
         {
-            SetBusy("Creating backup...");
+            SetBusy(_localization.GetString("busy.creating_backup"));
             await _modInstall.BackupModsFolderAsync(_settings.Settings.GamePath, _settings.Settings.StoragePath);
         }
 
@@ -1021,9 +1022,9 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var mod in modsWithUpdates)
         {
             var modName = mod.DisplayName;
-            SetBusy($"Updating {modName}... ({updated + 1}/{modsWithUpdates.Count})");
+            SetBusy(_localization.GetString("busy.update_multiple", modName, 0.0, updated + 1, modsWithUpdates.Count));
             var progress = new Progress<double>(p =>
-                BusyMessage = $"Updating {modName}… {p:P0} ({updated + 1}/{modsWithUpdates.Count})");
+                BusyMessage = _localization.GetString("busy.update_multiple", modName, p, updated + 1, modsWithUpdates.Count));
             var success = await _modInstall.UpdateModAsync(
                 mod.ModInfo, mod.ModInfo.PendingUpdate!, _settings.Settings.GamePath!, _settings.Settings.StoragePath, progress);
             if (success)
@@ -1035,7 +1036,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         ClearBusy();
         await RefreshModsAsync();
-        StatusMessage = $"Updated {updated}/{modsWithUpdates.Count} mods.";
+        StatusMessage = _localization.GetString("status.updated_n_total", updated, modsWithUpdates.Count);
     }
 
     // ── Rollback ──────────────────────────────────────────────────────────────
@@ -1047,7 +1048,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var displayName = SelectedMod.DisplayName;
         var modId = SelectedMod.Id;
-        SetBusy($"Rolling back {displayName} to v{version}...");
+        SetBusy(_localization.GetString("status.rolling_back", displayName, version));
         var success = await _modInstall.RollbackToVersionAsync(
             modId, version, _settings.Settings.GamePath, _settings.Settings.StoragePath);
         ClearBusy();
@@ -1055,11 +1056,11 @@ public partial class MainWindowViewModel : ViewModelBase
         if (success)
         {
             await RefreshModsAsync();
-            StatusMessage = $"Rolled back {displayName} to v{version}";
+            StatusMessage = _localization.GetString("status.rolled_back", displayName, version);
         }
         else
         {
-            StatusMessage = $"Rollback failed for {displayName}";
+            StatusMessage = _localization.GetString("status.rollback_failed", displayName);
         }
     }
 
@@ -1096,21 +1097,22 @@ public partial class MainWindowViewModel : ViewModelBase
         var active = ActiveMods.ToList();
         if (active.Count == 0) { StatusMessage = _localization.GetString("status.no_active_mods"); return; }
 
-        var confirmed = await _dialogService.ConfirmAsync("Unload All Mods",
-            $"Deactivate all {active.Count} active mod(s)?");
+        var confirmed = await _dialogService.ConfirmAsync(
+            _localization.GetString("dialog.unload_all_title"),
+            _localization.GetString("dialog.unload_all_message", active.Count));
         if (!confirmed) return;
 
-        SetBusy("Unloading all mods...");
+        SetBusy(_localization.GetString("busy.unloading_all"));
         int done = 0;
         foreach (var vm in active)
         {
-            BusyMessage = $"Deactivating {vm.DisplayName}... ({done + 1}/{active.Count})";
+            BusyMessage = _localization.GetString("busy.downloading_multiple", vm.DisplayName, done + 1, active.Count);
             var ok = await _modInstall.DeactivateModAsync(vm.ModInfo, _settings.Settings.GamePath!);
             if (ok) done++;
         }
         ClearBusy();
         await RefreshModsAsync();
-        StatusMessage = $"Deactivated {done}/{active.Count} mods.";
+        StatusMessage = _localization.GetString("status.deactivated_simple", done, active.Count);
     }
 
     [RelayCommand(CanExecute = nameof(CanModify))]
@@ -1143,28 +1145,28 @@ public partial class MainWindowViewModel : ViewModelBase
             var lines = new List<string>();
             if (githubEntries.Count > 0)
             {
-                lines.Add($"Will auto-download from GitHub ({githubEntries.Count}):");
+                lines.Add(_localization.GetString("dialog.download_will_auto_github", githubEntries.Count));
                 lines.AddRange(githubEntries.Select(e => $"  • {e.ModId}"));
             }
             if (nexusEntries.Count > 0)
             {
-                lines.Add($"Will open in browser for manual download ({nexusEntries.Count}):");
+                lines.Add(_localization.GetString("dialog.download_will_open_browser", nexusEntries.Count));
                 lines.AddRange(nexusEntries.Select(e => $"  • {e.ModId}"));
             }
 
             var confirmed = await _dialogService.ConfirmAsync(
-                "Download Missing Mods",
-                string.Join("\n", lines) + "\n\nProceed with downloads?");
+                _localization.GetString("dialog.download_missing_title"),
+                string.Join("\n", lines) + "\n\n" + _localization.GetString("dialog.download_proceed"));
 
             if (confirmed)
             {
                 int downloaded = 0;
                 var failedEntries = new List<(string ModId, string? HomePageUrl)>();
-                SetBusy($"Downloading missing mods (0/{githubEntries.Count})...");
+                SetBusy(_localization.GetString("busy.downloading_multiple", "...", 0, githubEntries.Count));
 
                 foreach (var entry in githubEntries)
                 {
-                    BusyMessage = $"Resolving {entry.ModId}...";
+                    BusyMessage = _localization.GetString("busy.resolving_mod", entry.ModId);
                     // Build a stub ModInfo so we can call CheckUpdateAsync which
                     // calls the GitHub releases API to get the asset download URL.
                     var stub = new ModInfo
@@ -1179,9 +1181,9 @@ public partial class MainWindowViewModel : ViewModelBase
                         var updateInfo = await _updateService.CheckUpdateAsync(stub, resolveCts.Token);
                         if (updateInfo?.DownloadUrl != null)
                         {
-                            BusyMessage = $"Downloading {entry.ModId} ({downloaded + 1}/{githubEntries.Count})...";
+                            BusyMessage = _localization.GetString("busy.downloading_multiple", entry.ModId, downloaded + 1, githubEntries.Count);
                             var progress = new Progress<double>(p =>
-                                BusyMessage = $"Downloading {entry.ModId} {p:P0} ({downloaded + 1}/{githubEntries.Count})...");
+                                BusyMessage = _localization.GetString("busy.downloading_multiple", entry.ModId, downloaded + 1, githubEntries.Count) + $" {p:P0}");
                             using var downloadCts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
                             var result = await _modInstall.DownloadAndInstallFromUrlAsync(
                                 updateInfo.DownloadUrl, _settings.Settings.GamePath, _settings.Settings.StoragePath,
@@ -1213,13 +1215,13 @@ public partial class MainWindowViewModel : ViewModelBase
                 if (failedEntries.Count > 0)
                 {
                     var openNexus = await _dialogService.ShowFailedDownloadsAsync(
-                        "Download Failed", failedEntries);
+                        _localization.GetString("dialog.failed_downloads_title"), failedEntries);
                     if (openNexus)
                     {
                         foreach (var (_, homePageUrl) in failedEntries.Where(f => !string.IsNullOrEmpty(f.HomePageUrl)))
                             Helpers.PlatformHelper.Open(homePageUrl!);
                     }
-                    StatusMessage = $"Downloaded {downloaded} mod(s). {failedEntries.Count} could not be auto-downloaded.";
+                    StatusMessage = _localization.GetString("status.downloaded_n_failed", downloaded, failedEntries.Count);
                 }
             }
         }
@@ -1369,7 +1371,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // Backup before bulk change
         if (_settings.Settings.BackupBeforeChanges)
         {
-            SetBusy("Creating backup...");
+            SetBusy(_localization.GetString("busy.creating_backup"));
             await _modInstall.BackupModsFolderAsync(_settings.Settings.GamePath, _settings.Settings.StoragePath);
         }
 
@@ -1451,14 +1453,14 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_settings.Settings.GamePath == null)
         {
-            StatusMessage = "Game path not set. Open Settings to configure.";
+            StatusMessage = _localization.GetString("status.game_path_not_set");
             return;
         }
 
         var modsDir = Path.Combine(_settings.Settings.GamePath, "Mods");
         if (!Directory.Exists(modsDir))
         {
-            StatusMessage = $"Mods folder not found: {modsDir}";
+            StatusMessage = _localization.GetString("status.mods_folder_not_found", modsDir);
             return;
         }
 
@@ -1469,7 +1471,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Scan error: {ex.Message}";
+            StatusMessage = _localization.GetString("status.scan_error", ex.Message);
             return;
         }
 
@@ -1598,7 +1600,7 @@ public partial class MainWindowViewModel : ViewModelBase
         Dispatcher.UIThread.Post(() =>
         {
             IsGameRunning = running;
-            StatusMessage = running ? "Game is running. Mod changes are locked." : "Game stopped. Mod changes unlocked.";
+            StatusMessage = running ? _localization.GetString("status.game_running_locked") : _localization.GetString("status.game_stopped_unlocked");
             ActivateSelectedModCommand.NotifyCanExecuteChanged();
             DeactivateSelectedModCommand.NotifyCanExecuteChanged();
             InstallModFromFileCommand.NotifyCanExecuteChanged();
@@ -1678,7 +1680,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (inactiveMap.TryGetValue(depId, out var depVm))
             {
-                BusyMessage = $"Activating dependency {depVm.DisplayName}...";
+                BusyMessage = _localization.GetString("busy.activating_dependency", depVm.DisplayName);
                 var ok = await _modInstall.ActivateModAsync(depVm.ModInfo, _settings.Settings.GamePath);
                 if (ok)
                 {
@@ -1723,16 +1725,16 @@ public partial class MainWindowViewModel : ViewModelBase
 
         vm.State = ModState.MissingDependency;
         vm.HasMissingDependency = true;
-        StatusMessage = $"Missing dependencies for {vm.DisplayName}: {string.Join(", ", missing)}";
+        StatusMessage = _localization.GetString("status.missing_dependencies", vm.DisplayName, string.Join(", ", missing));
         return false;
     }
 
     private async Task PromptGamePathAsync()
     {
-        var path = await _dialogService.PickFolderAsync("Select Derail Valley installation folder");
+        var path = await _dialogService.PickFolderAsync(_localization.GetString("dialog.select_game_folder"));
         if (path == null || !_gameDetection.ValidateGamePath(path))
         {
-            await _dialogService.ShowMessageAsync("Error", "Invalid game path — could not find DerailValley_Data folder.");
+            await _dialogService.ShowMessageAsync(_localization.GetString("dialog.error"), _localization.GetString("dialog.invalid_game_path"));
             return;
         }
         _settings.Settings.GamePath = path;

@@ -57,8 +57,9 @@ public partial class ProfileViewModel : ViewModelBase
     private async Task DeleteSelectedAsync()
     {
         if (SelectedProfile == null) return;
-        var confirmed = await _dialogService.ConfirmAsync("Delete Profile",
-            $"Delete profile '{SelectedProfile.Name}'?");
+        var confirmed = await _dialogService.ConfirmAsync(
+            _loc.GetString("dialog.delete_profile_title"),
+            _loc.GetString("dialog.delete_profile_message", SelectedProfile.Name));
         if (!confirmed) return;
 
         await _profileService.DeleteProfileAsync(SelectedProfile.Name, _profilesPath);
@@ -79,7 +80,7 @@ public partial class ProfileViewModel : ViewModelBase
         if (choice == ExportOption.Json)
         {
             var path = await _dialogService.SaveFileAsync(exportTitle,
-                "JSON Profile", ["json"], SelectedProfile.Name + ".json");
+                _loc.GetString("file.filter.json_profile"), ["json"], SelectedProfile.Name + ".json");
             if (path == null) return;
             await _profileService.ExportProfileAsync(SelectedProfile, path);
             return;
@@ -95,7 +96,7 @@ public partial class ProfileViewModel : ViewModelBase
         if (string.IsNullOrEmpty(gamePath)) return;
 
         var zipPath = await _dialogService.SaveFileAsync(exportTitle,
-            "ZIP Modpack", ["zip"], SelectedProfile.Name + ".zip");
+            _loc.GetString("file.filter.zip_modpack"), ["zip"], SelectedProfile.Name + ".zip");
         if (zipPath == null) return;
 
         await _profileService.ExportProfileAsZipAsync(SelectedProfile, gamePath, zipPath);
@@ -104,7 +105,9 @@ public partial class ProfileViewModel : ViewModelBase
     [RelayCommand]
     private async Task ImportAsync()
     {
-        var path = await _dialogService.OpenFileAsync("Import Profile", "JSON Profile", ["json"]);
+        var path = await _dialogService.OpenFileAsync(
+            _loc.GetString("dialog.import_profile"),
+            _loc.GetString("file.filter.json_profile"), ["json"]);
         if (path == null) return;
 
         try
@@ -115,7 +118,7 @@ public partial class ProfileViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            await _dialogService.ShowMessageAsync("Import Failed", ex.Message);
+            await _dialogService.ShowMessageAsync(_loc.GetString("dialog.import_failed"), ex.Message);
         }
     }
 
