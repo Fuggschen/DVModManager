@@ -86,6 +86,6 @@ Source code is distributed under the MIT license.
 See [LICENSE][license-url] for more information. Note that this mod carries its own
 copyright, separate from the mod manager's.
 
-[license-url]: https://github.com/Fuggschen/DVModManager/blob/beta/DVModProfiles/LICENSE
+[license-url]: https://github.com/Fuggschen/DVModManager/blob/main/DVModProfiles/LICENSE
 [references-url]: https://learn.microsoft.com/en-us/visualstudio/msbuild/customize-your-build?view=vs-2022
 [repo-url]: https://github.com/Fuggschen/DVModManager

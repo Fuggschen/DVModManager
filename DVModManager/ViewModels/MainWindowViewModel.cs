@@ -40,7 +40,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _panelActiveHeader = "Active Mods";
 
     // ── App version / update ───────────────────────────────────────────────────
-    private const string ManagerUpdateRepository = "https://raw.githubusercontent.com/Fuggschen/DVModManager/beta/DVModManager/repository.json";
+    private const string ManagerUpdateRepository = "https://raw.githubusercontent.com/Fuggschen/DVModManager/main/DVModManager/repository.json";
 
     public string AppVersion { get; } = StripMetadata(
         Assembly.GetExecutingAssembly()
@@ -61,7 +61,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // ── Companion mod state ───────────────────────────────────────────────────
     private const string CompanionModId = "DVModProfiles";
-    private const string CompanionModRepository = "https://raw.githubusercontent.com/Fuggschen/DVModManager/beta/DVModProfiles/repository.json";
+    private const string CompanionModRepository = "https://raw.githubusercontent.com/Fuggschen/DVModManager/main/DVModProfiles/repository.json";
 
     [ObservableProperty] private bool _isCompanionModInstalled;
     [ObservableProperty] private bool _isCompanionModInactive;
