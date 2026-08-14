@@ -116,4 +116,10 @@ public partial class MainWindow : Window
 
         e.Handled = true;
     }
+
+    private void OnUpdateLabelPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+            _ = vm.OpenManagerUpdateAsync();
+    }
 }

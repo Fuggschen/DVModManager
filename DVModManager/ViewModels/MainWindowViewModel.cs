@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Reflection;
+using System.Text.Json;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -36,6 +38,26 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _windowTitle = "DV Mod Manager";
     [ObservableProperty] private string _panelAvailableHeader = "Available Mods";
     [ObservableProperty] private string _panelActiveHeader = "Active Mods";
+
+    // ── App version / update ───────────────────────────────────────────────────
+    private const string ManagerUpdateRepository = "https://raw.githubusercontent.com/Fuggschen/DVModManager/beta/DVModManager/repository.json";
+
+    public string AppVersion { get; } = StripMetadata(
+        Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+        ?? "0.0.0");
+
+    private static string StripMetadata(string version)
+    {
+        var plus = version.IndexOf('+');
+        return plus > 0 ? version[..plus] : version;
+    }
+
+    [ObservableProperty] private bool _hasManagerUpdate;
+    [ObservableProperty] private string _latestManagerVersion = "";
+    [ObservableProperty] private string _managerUpdateUrl = "";
+    [ObservableProperty] private string _appVersionLabel = "";
 
     // ── Companion mod state ───────────────────────────────────────────────────
     private const string CompanionModId = "DVModProfiles";
@@ -117,6 +139,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         IsGameRunning = _gameDetection.IsGameRunning();
         UpdateLocalizedStrings();
+        _ = CheckManagerUpdateAsync();
     }
 
     partial void OnAvailableFilterChanged(string value) => ApplyGroupedFilters();
@@ -1587,6 +1610,7 @@ public partial class MainWindowViewModel : ViewModelBase
         WindowTitle = _localization.GetString("window.title");
         PanelAvailableHeader = _localization.GetString("panel.available");
         PanelActiveHeader = _localization.GetString("panel.active");
+        UpdateAppVersionLabel();
     }
 
     private void MoveToActive(ModItemViewModel vm)
@@ -1721,6 +1745,70 @@ public partial class MainWindowViewModel : ViewModelBase
             _pendingExternalRefresh = false;
             _ = RefreshModsAsync();
         }
+    }
+
+    // ── Manager update check ──────────────────────────────────────────────────
+
+    private async Task CheckManagerUpdateAsync()
+    {
+        try
+        {
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromSeconds(15);
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/" + AppVersion);
+            string json;
+            json = await http.GetStringAsync(ManagerUpdateRepository);
+
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("Version", out var vProp)) return;
+            var latestVersion = vProp.GetString();
+            if (latestVersion == null) return;
+
+            if (!IsNewerVersion(AppVersion, latestVersion)) return;
+
+            LatestManagerVersion = latestVersion;
+            ManagerUpdateUrl = doc.RootElement.TryGetProperty("ReleaseUrl", out var ruProp)
+                ? ruProp.GetString() ?? ""
+                : "";
+            HasManagerUpdate = true;
+            UpdateAppVersionLabel();
+        }
+        catch
+        {
+            // Silent — don't bother the user if the check fails
+        }
+    }
+
+    private static bool IsNewerVersion(string current, string latest)
+    {
+        if (Version.TryParse(Normalize(current), out var c) &&
+            Version.TryParse(Normalize(latest), out var l))
+            return l > c;
+        return false;
+    }
+
+    private static string Normalize(string v)
+    {
+        var s = v.Trim().TrimStart('v', 'V');
+        // Ensure at least Major.Minor for System.Version
+        if (s.Count(c => c == '.') < 1) s += ".0";
+        return s;
+    }
+
+    private void UpdateAppVersionLabel()
+    {
+        if (HasManagerUpdate)
+            AppVersionLabel = _localization.GetString("app.version_update", AppVersion, LatestManagerVersion);
+        else
+            AppVersionLabel = _localization.GetString("app.version", AppVersion);
+    }
+
+    [RelayCommand]
+    public Task OpenManagerUpdateAsync()
+    {
+        if (!string.IsNullOrEmpty(ManagerUpdateUrl))
+            Helpers.PlatformHelper.Open(ManagerUpdateUrl);
+        return Task.CompletedTask;
     }
 
     private static Avalonia.Controls.Window GetMainWindow()

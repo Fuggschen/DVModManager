@@ -226,15 +226,31 @@
                            VerticalAlignment="Center"
                            Margin="16,0,0,0" />
 
-                <!-- Busy indicator -->
+                <!-- App version / update indicator -->
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
-                            Spacing="6"
-                            IsVisible="{Binding IsBusy}">
+                            Spacing="6">
+                    <TextBlock Text="{Binding AppVersionLabel}"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               Foreground="#6c7086"
+                               IsVisible="{Binding !HasManagerUpdate}"
+                               Cursor="Arrow" />
+                    <TextBlock Text="{Binding AppVersionLabel}"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               Foreground="#fab387"
+                               IsVisible="{Binding HasManagerUpdate}"
+                               Cursor="Hand"
+                               ToolTip.Tip="Click to open release page"
+                               PointerPressed="OnUpdateLabelPressed" />
+
+                    <!-- Busy indicator (overlaid on version when busy) -->
                     <TextBlock Text="{Binding BusyMessage}"
                                Foreground="#89b4fa"
                                FontSize="12"
-                               VerticalAlignment="Center" />
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding IsBusy}" />
                 </StackPanel>
             </Grid>
         </Border>
