@@ -6,7 +6,8 @@
              x:Class="DVModManager.Views.ModListView"
              x:Name="Root">
 
-    <Border Background="#181825"
+    <Border x:Name="RootBorder"
+            Background="#181825"
             BorderBrush="#313244"
             BorderThickness="1"
             Margin="4">
@@ -70,7 +71,7 @@
                      Background="Transparent"
                      BorderThickness="0"
                      Padding="4,4,16,4"
-                     DragDrop.AllowDrop="True">
+>
                 <ListBox.DataTemplates>
 
                     <!-- Group header -->
@@ -227,6 +228,35 @@
 
                 </ListBox.DataTemplates>
             </ListBox>
+
+            <!-- Visible overlay hint (non-hit-test, shows on top of everything) -->
+            <Panel x:Name="DropHintOverlay"
+                   Grid.Row="0"
+                   Grid.RowSpan="3"
+                   IsVisible="False"
+                   Background="#9911111b"
+                   IsHitTestVisible="False"
+                   ZIndex="100">
+                <Border BorderBrush="#89b4fa"
+                        BorderThickness="2"
+                        CornerRadius="8"
+                        Background="#2289b4fa"
+                        Margin="16">
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="8">
+                        <TextBlock Text="⬇"
+                                   FontSize="48"
+                                   Foreground="#89b4fa"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock x:Name="DropOverlayText"
+                                   Text="{conv:Localize drop.hint.install}"
+                                   FontSize="14"
+                                   Foreground="#89b4fa"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Panel>
         </Grid>
     </Border>
 </UserControl>

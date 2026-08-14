@@ -189,3 +189,4 @@ busy.activating_companion,Activating companion mod...,Begleitmod wird aktiviert�
 status.companion_installed,DV Mod Profiles installed successfully.,DV Mod Profiles erfolgreich installiert.,DV Mod Profiles installé avec succès.,
 status.companion_activated,DV Mod Profiles activated.,DV Mod Profiles aktiviert.,DV Mod Profiles activé.,
 status.companion_install_failed,Failed to install companion mod.,Installation der Begleitmod fehlgeschlagen.,Échec de l'installation du mod compagnon.,
+drop.hint.install,Drop .zip files here to install,.zip-Dateien hier ablegen zum Installieren,Déposez des fichiers .zip ici pour installer,

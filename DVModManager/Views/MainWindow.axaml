@@ -9,7 +9,12 @@
         Width="1280" Height="800"
         MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen"
-        Background="#11111b">
+        Background="#11111b"
+        DragDrop.AllowDrop="True"
+        DragDrop.DragEnter="OnDragEnter"
+        DragDrop.DragLeave="OnDragLeave"
+        DragDrop.DragOver="OnDragOver"
+        DragDrop.Drop="OnDrop">
 
     <Window.Resources>
         <conv:InverseBoolConverter x:Key="InvBool" />

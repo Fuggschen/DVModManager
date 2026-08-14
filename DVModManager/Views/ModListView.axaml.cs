@@ -95,8 +95,8 @@ public partial class ModListView : UserControl
         lb.AddHandler(PointerPressedEvent,  OnListPointerPressed,  RoutingStrategies.Tunnel);
         lb.AddHandler(PointerMovedEvent,    OnListPointerMoved,    RoutingStrategies.Tunnel);
         lb.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Tunnel);
-        lb.AddHandler(DragDrop.DragOverEvent, OnListDragOver);
-        lb.AddHandler(DragDrop.DropEvent,     OnListDrop);
+        DragDrop.AddDragOverHandler(lb, OnListDragOver);
+        DragDrop.AddDropHandler(lb, OnListDrop);
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -109,8 +109,8 @@ public partial class ModListView : UserControl
         lb.RemoveHandler(PointerPressedEvent,  OnListPointerPressed);
         lb.RemoveHandler(PointerMovedEvent,    OnListPointerMoved);
         lb.RemoveHandler(PointerReleasedEvent, OnListPointerReleased);
-        lb.RemoveHandler(DragDrop.DragOverEvent, OnListDragOver);
-        lb.RemoveHandler(DragDrop.DropEvent,     OnListDrop);
+        DragDrop.RemoveDragOverHandler(lb, OnListDragOver);
+        DragDrop.RemoveDropHandler(lb, OnListDrop);
     }
 
     private void OnListSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -260,14 +260,15 @@ public partial class ModListView : UserControl
         s_dragPayload = null;
     }
 
-    // ── Drop handling ─────────────────────────────────────────────────────────
+    // ── Internal mod-to-mod DnD ─────────────────────────────────────────────
 
     private void OnListDragOver(object? sender, DragEventArgs e)
     {
-        e.DragEffects = (e.DataTransfer.TryGetText() == DragToken)
-            ? DragDropEffects.Move
-            : DragDropEffects.None;
-        e.Handled = true;
+        if (e.DataTransfer.TryGetText() == DragToken)
+        {
+            e.DragEffects = DragDropEffects.Move;
+            e.Handled = true;
+        }
     }
 
     private void OnListDrop(object? sender, DragEventArgs e)

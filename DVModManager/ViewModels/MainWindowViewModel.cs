@@ -657,6 +657,97 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Installs one or more dropped archive files. If <paramref name="activate"/> is true,
+    /// each mod is also activated after install (with dependency resolution). If a dependency
+    /// is missing, the mod is installed but not activated (stays in Available).
+    /// </summary>
+    public async Task InstallDroppedArchivesAsync(IReadOnlyList<string> archivePaths, bool activate)
+    {
+        if (_settings.Settings.GamePath == null) return;
+
+        var installedNames = new List<string>();
+        var activatedNames = new List<string>();
+        var failedCount = 0;
+
+        // Install all archives first (always install to available/inactive)
+        foreach (var path in archivePaths)
+        {
+            SetBusy(_localization.GetString("busy.installing_mod", Path.GetFileName(path)));
+            var mod = await _modInstall.InstallFromArchiveAsync(
+                path, _settings.Settings.GamePath, _settings.Settings.StoragePath, activate: false);
+
+            if (mod == null)
+            {
+                failedCount++;
+                continue;
+            }
+
+            installedNames.Add(mod.EffectiveDisplayName);
+        }
+
+        // Refresh so newly installed mods appear in the lists
+        await RefreshModsAsync();
+
+        // If dropping on the active panel, activate each installed mod with dependency resolution
+        if (activate && installedNames.Count > 0)
+        {
+            foreach (var name in installedNames.ToList())
+            {
+                // Find by matching the name of mods that were just installed
+                var installed = AvailableMods
+                    .FirstOrDefault(m => installedNames.Contains(m.DisplayName)
+                        && !m.IsActive);
+                if (installed == null) continue;
+
+                BusyMessage = _localization.GetString("status.resolving_dependencies", installed.DisplayName);
+                var missing = await AutoActivateDependenciesAsync(installed);
+                if (missing.Count == 0)
+                {
+                    var success = await _modInstall.ActivateModAsync(installed.ModInfo, _settings.Settings.GamePath);
+                    if (success)
+                    {
+                        installed.SyncFromModel();
+                        MoveToActive(installed);
+                        activatedNames.Add(installed.DisplayName);
+                    }
+                }
+                // If dependencies are missing, mod stays in Available
+            }
+        }
+
+        ClearBusy();
+
+        // Build status message
+        if (archivePaths.Count == 1)
+        {
+            if (installedNames.Count > 0)
+            {
+                if (activate && activatedNames.Count > 0)
+                    StatusMessage = _localization.GetString("status.activated", activatedNames[0]);
+                else if (activate)
+                    StatusMessage = _localization.GetString("status.install_success", installedNames[0]);
+                else
+                    StatusMessage = _localization.GetString("status.install_success", installedNames[0]);
+            }
+            else
+            {
+                StatusMessage = _localization.GetString("status.install_failed");
+            }
+        }
+        else
+        {
+            var parts = new List<string>();
+            if (installedNames.Count > 0)
+                parts.Add($"{installedNames.Count} mod(s) installed");
+            if (activatedNames.Count > 0)
+                parts.Add($"{activatedNames.Count} activated");
+            if (failedCount > 0)
+                parts.Add($"{failedCount} failed");
+            StatusMessage = string.Join(", ", parts);
+        }
+    }
+
     private bool CanInstallCompanion() => !IsCompanionModInstalled || IsCompanionModInactive;
 
     private void RecheckCompanionCanExecute()
