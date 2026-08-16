@@ -23,41 +23,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Verify tag matches info.json version
+      - name: Verify tag matches a valid manifest entry
         shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          # The tag carries the mod prefix; the version fields do not.
-          $tag = '${{ github.ref_name }}'
-          $version = $tag -replace '^dvmodprofiles-v', ''
-          $info = Get-Content -Raw info.json | ConvertFrom-Json
-          $errors = @()
-
-          if ($info.Version -ne $version) {
-            $errors += "info.json Version is '$($info.Version)', expected '$version'."
-          }
-
-          $release = (Get-Content -Raw repository.json | ConvertFrom-Json).Releases |
-            Where-Object { $_.Id -eq $info.Id }
-          if (-not $release) {
-            $errors += "repository.json has no Releases entry with Id '$($info.Id)'."
-          } else {
-            if ($release.Version -ne $version) {
-              $errors += "repository.json Version is '$($release.Version)', expected '$version'."
-            }
-            # The download path segment is the full tag, not the bare version.
-            $expectedUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/$($info.Id).zip"
-            if ($release.DownloadUrl -ne $expectedUrl) {
-              $errors += "repository.json DownloadUrl is '$($release.DownloadUrl)', expected '$expectedUrl'."
-            }
-          }
-
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Host "::error::$_" }
-            Write-Error "Version mismatch for tag '$tag'. Bump every version field in info.json and repository.json (including the version inside DownloadUrl) before tagging."
-            exit 1
-          }
-          Write-Host "Releasing version $version"
+        run: ./validate-manifests.ps1 -Tag '${{ github.ref_name }}'
 
       - name: Build and package
         run: dotnet build DVModProfiles.csproj -c Release
