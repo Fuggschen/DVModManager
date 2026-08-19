@@ -4,7 +4,6 @@ public class AppSettings : PublicSettings
 {
     public string? GamePath { get; set; }
 
-    public string? NexusApiKey { get; set; }
     public string? GitHubToken { get; set; }
 
     /// <summary>"Dark" or "Light"</summary>

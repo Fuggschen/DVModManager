@@ -73,23 +73,6 @@
                     </Grid>
                 </StackPanel>
 
-                <!-- ── Nexus API Key ──────────────────────────────── -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="{conv:Localize settings.section.nexus}"
-                               FontSize="13"
-                               FontWeight="SemiBold"
-                               Foreground="#cdd6f4" />
-                    <TextBlock Text="{conv:Localize settings.nexus.description}"
-                               Foreground="#6c7086"
-                               FontSize="11" />
-                    <TextBox Text="{Binding NexusApiKey, Mode=TwoWay}"
-                             PlaceholderText="{conv:Localize settings.nexus.placeholder}"
-                             PasswordChar="•"
-                             Background="#313244"
-                             BorderBrush="#45475a"
-                             Foreground="#cdd6f4" />
-                </StackPanel>
-
                 <!-- ── GitHub Token ───────────────────────────────── -->
                 <StackPanel Spacing="6">
                     <TextBlock Text="{conv:Localize settings.section.github}"

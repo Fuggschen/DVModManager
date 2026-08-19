@@ -33,8 +33,8 @@ public class UpdateService : IUpdateService
             if (ghUpdate != null) return ghUpdate;
         }
 
-        // Try Nexus if API key is configured
-        if (_nexus.IsConfigured && !string.IsNullOrEmpty(mod.HomePage))
+        // Try Nexus
+        if (!string.IsNullOrEmpty(mod.HomePage))
         {
             var nexusUpdate = await _nexus.CheckUpdateAsync(mod, ct);
             if (nexusUpdate != null) return nexusUpdate;

@@ -15,7 +15,6 @@ public partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty] private string _gamePath = "";
     [ObservableProperty] private string _storagePath = "";
-    [ObservableProperty] private string _nexusApiKey = "";
     [ObservableProperty] private string _gitHubToken = "";
     [ObservableProperty] private bool _autoCheckUpdates = true;
     [ObservableProperty] private bool _backupBeforeChanges = true;
@@ -53,7 +52,6 @@ public partial class SettingsViewModel : ViewModelBase
     {
         GamePath = settings.GamePath ?? "";
         StoragePath = settings.StoragePath;
-        NexusApiKey = settings.NexusApiKey ?? "";
         GitHubToken = settings.GitHubToken ?? "";
         AutoCheckUpdates = settings.AutoCheckUpdatesOnStartup;
         BackupBeforeChanges = settings.BackupBeforeChanges;
@@ -68,7 +66,6 @@ public partial class SettingsViewModel : ViewModelBase
     {
         settings.GamePath = string.IsNullOrWhiteSpace(GamePath) ? null : GamePath;
         settings.StoragePath = StoragePath;
-        settings.NexusApiKey = string.IsNullOrWhiteSpace(NexusApiKey) ? null : NexusApiKey;
         settings.GitHubToken = string.IsNullOrWhiteSpace(GitHubToken) ? null : GitHubToken;
         settings.AutoCheckUpdatesOnStartup = AutoCheckUpdates;
         settings.BackupBeforeChanges = BackupBeforeChanges;
