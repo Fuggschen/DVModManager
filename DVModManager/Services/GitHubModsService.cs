@@ -8,13 +8,11 @@ namespace DVModManager.Services;
 
 public class GitHubModsService : IGitHubModsService
 {
-    private readonly ISettingsService _settings;
     private readonly ILogger<GitHubModsService> _logger;
     private GitHubClient? _client;
 
-    public GitHubModsService(ISettingsService settings, ILogger<GitHubModsService> logger)
+    public GitHubModsService(ILogger<GitHubModsService> logger)
     {
-        _settings = settings;
         _logger = logger;
     }
 
@@ -23,10 +21,6 @@ public class GitHubModsService : IGitHubModsService
         if (_client != null) return _client;
 
         _client = new GitHubClient(new ProductHeaderValue("DVModManager"));
-
-        var token = _settings.Settings.GitHubToken;
-        if (!string.IsNullOrWhiteSpace(token))
-            _client.Credentials = new Credentials(token);
 
         return _client;
     }
