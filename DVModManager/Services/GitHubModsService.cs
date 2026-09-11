@@ -112,11 +112,22 @@ public class GitHubModsService : IGitHubModsService
             {
                 foreach (var r in releases.EnumerateArray())
                 {
+                    // If the entry has an Id, only use it when it matches the mod we're checking.
+                    // This prevents false updates for repos listing multiple mods.
+                    if (r.TryGetProperty("Id", out var idProp))
+                    {
+                        var entryId = idProp.GetString();
+                        if (!string.Equals(entryId, mod.Id, StringComparison.OrdinalIgnoreCase))
+                            continue; // Not this mod — skip
+                    }
+
                     if (r.TryGetProperty("Version", out var rv))
                         latestVersion ??= rv.GetString();
                     if (r.TryGetProperty("DownloadUrl", out var du))
                         downloadUrl ??= du.GetString();
-                    break; // first entry is the latest
+
+                    // If we matched by ID, we have our entry — stop searching
+                    if (r.TryGetProperty("Id", out _)) break;
                 }
             }
 
