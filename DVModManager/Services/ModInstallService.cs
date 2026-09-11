@@ -423,6 +423,10 @@ public class ModInstallService : IModInstallService
             // 4. Install — preserves active/inactive state
             var result = await InstallFromArchiveAsync(
                 downloadPath, gamePath, storagePath, mod.IsActive, ct);
+
+            // 5. Clean up downloaded zip after successful install
+            try { File.Delete(downloadPath); } catch { /* best-effort */ }
+
             return result != null;
         }
         catch (Exception ex)
