@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using Avalonia.Threading;
 using DVModManager.ViewModels;
 
 namespace DVModManager.Views;
@@ -80,6 +81,11 @@ public partial class ModListView : UserControl
     // Static payload holds all mods being dragged — safe because only one drag can be in-flight at a time
     private static List<ModItemViewModel>? s_dragPayload;
 
+    // ── Drag auto-scroll state
+    private DispatcherTimer? _dragScrollTimer;
+    private int _dragScrollDirection;
+    private double _dragScrollSpeed = 8.0;
+
     public ModListView()
     {
         InitializeComponent();
@@ -96,6 +102,7 @@ public partial class ModListView : UserControl
         lb.AddHandler(PointerMovedEvent,    OnListPointerMoved,    RoutingStrategies.Tunnel);
         lb.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Tunnel);
         DragDrop.AddDragOverHandler(lb, OnListDragOver);
+        DragDrop.AddDragLeaveHandler(lb, OnListDragLeave);
         DragDrop.AddDropHandler(lb, OnListDrop);
     }
 
@@ -110,7 +117,10 @@ public partial class ModListView : UserControl
         lb.RemoveHandler(PointerMovedEvent,    OnListPointerMoved);
         lb.RemoveHandler(PointerReleasedEvent, OnListPointerReleased);
         DragDrop.RemoveDragOverHandler(lb, OnListDragOver);
+        DragDrop.RemoveDragLeaveHandler(lb, OnListDragLeave);
         DragDrop.RemoveDropHandler(lb, OnListDrop);
+
+        StopDragAutoScroll();
     }
 
     private void OnListSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -229,8 +239,7 @@ public partial class ModListView : UserControl
         var delta = e.GetPosition(this) - _dragOrigin.Value;
         if (Math.Abs(delta.X) < 8 && Math.Abs(delta.Y) < 8) return;
 
-        // Threshold exceeded — resolve payload: all checked mods if the dragged mod is checked
-        _pendingSingleSelect = null; // drag started, cancel deferred single-select
+        _pendingSingleSelect = null;
         if (DataContext is MainWindowViewModel vm)
         {
             var checkedMods = vm.AvailableMods.Concat(vm.ActiveMods).Where(m => m.IsChecked).ToList();
@@ -243,12 +252,10 @@ public partial class ModListView : UserControl
             s_dragPayload = [_draggedMod];
         }
 
-        // Kick off system DnD
         var pressedArgs = _pressedArgs;
         _pressedArgs = null;
         _dragOrigin  = null;
         _draggedMod  = null;
-        // s_dragPayload stays set until DoDragDropAsync completes
 
         var item     = DataTransferItem.CreateText(DragToken);
         var transfer = new DataTransfer();
@@ -260,19 +267,164 @@ public partial class ModListView : UserControl
         s_dragPayload = null;
     }
 
-    // ── Internal mod-to-mod DnD ─────────────────────────────────────────────
-
     private void OnListDragOver(object? sender, DragEventArgs e)
     {
-        if (e.DataTransfer.TryGetText() == DragToken)
+        if (e.DataTransfer.TryGetText() != DragToken)
+            return;
+
+        e.DragEffects = DragDropEffects.Move;
+        UpdateDragAutoScroll(e);
+        e.Handled = true;
+    }
+
+    private void UpdateDragAutoScroll(DragEventArgs e)
+    {
+        var lb = this.FindControl<ListBox>("ModListBox");
+
+        if (lb == null)
         {
-            e.DragEffects = DragDropEffects.Move;
-            e.Handled = true;
+            StopDragAutoScroll();
+            return;
         }
+
+        var position = e.GetPosition(lb);
+
+        const double edgeSize = 60.0;
+
+        // Cursor is near the top edge
+        if (position.Y <= edgeSize)
+        {
+            _dragScrollDirection = -1;
+
+            var distance = Math.Clamp(
+                position.Y,
+                0,
+                edgeSize);
+
+            var progress = 1.0 - (distance / edgeSize);
+
+            _dragScrollSpeed = CalculateDragScrollSpeed(progress);
+
+            StartDragAutoScroll();
+        }
+
+        // Cursor is near the bottom edge
+        else if (position.Y >= lb.Bounds.Height - edgeSize)
+        {
+            _dragScrollDirection = 1;
+
+            var distance = Math.Clamp(
+                lb.Bounds.Height - position.Y,
+                0,
+                edgeSize);
+
+            var progress = 1.0 - (distance / edgeSize);
+
+            _dragScrollSpeed = CalculateDragScrollSpeed(progress);
+
+            StartDragAutoScroll();
+        }
+
+        // Cursor is not near either edge
+        else
+        {
+            StopDragAutoScroll();
+        }
+    }
+
+
+    private static double CalculateDragScrollSpeed(double progress)
+    {
+        const double minSpeed = 1.5;
+        const double maxSpeed = 30.0;
+
+        var easedProgress = progress * progress * progress;
+
+        return minSpeed +
+            ((maxSpeed - minSpeed) * easedProgress);
+    }
+
+
+    private void StartDragAutoScroll()
+    {
+        if (_dragScrollTimer != null)
+            return;
+
+        _dragScrollTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+
+        _dragScrollTimer.Tick += OnDragScrollTimerTick;
+        _dragScrollTimer.Start();
+    }
+
+
+    private void StopDragAutoScroll()
+    {
+        if (_dragScrollTimer == null)
+            return;
+
+        _dragScrollTimer.Stop();
+        _dragScrollTimer.Tick -= OnDragScrollTimerTick;
+
+        _dragScrollTimer = null;
+        _dragScrollDirection = 0;
+        _dragScrollSpeed = 0;
+    }
+
+
+    private void OnDragScrollTimerTick(object? sender, EventArgs e)
+    {
+        if (_dragScrollDirection == 0)
+            return;
+
+        var lb = this.FindControl<ListBox>("ModListBox");
+
+        if (lb == null)
+        {
+            StopDragAutoScroll();
+            return;
+        }
+
+        var scrollViewer = lb
+            .GetVisualDescendants()
+            .OfType<ScrollViewer>()
+            .FirstOrDefault();
+
+        if (scrollViewer == null)
+            return;
+
+        var offset = scrollViewer.Offset;
+
+        var maxOffsetY = Math.Max(
+            0,
+            scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+
+        var newOffsetY = Math.Clamp(
+            offset.Y + (_dragScrollDirection * _dragScrollSpeed),
+            0,
+            maxOffsetY);
+
+        // Already at the top or bottom
+        if (Math.Abs(newOffsetY - offset.Y) < 0.01)
+            return;
+
+        scrollViewer.Offset = new Vector(
+            offset.X,
+            newOffsetY);
+    }
+
+
+    private void OnListDragLeave(object? sender, DragEventArgs e)
+    {
+        StopDragAutoScroll();
     }
 
     private void OnListDrop(object? sender, DragEventArgs e)
     {
+        StopDragAutoScroll();
+
         if (e.DataTransfer.TryGetText() != DragToken) return;
         var payload = s_dragPayload;
         s_dragPayload = null;
