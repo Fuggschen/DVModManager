@@ -480,24 +480,6 @@ public class ModInstallService : IModInstallService
         }
     }
 
-    // ── Backup whole Mods folder ──────────────────────────────────────────────
-
-    public async Task<string> BackupModsFolderAsync(string gamePath, string storagePath)
-    {
-        var modsDir = Path.Combine(gamePath, "Mods");
-        var backupsDir = Path.Combine(storagePath, "backups");
-        Directory.CreateDirectory(backupsDir);
-
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-        var backupPath = Path.Combine(backupsDir, $"Mods_backup_{timestamp}.zip");
-
-        if (Directory.Exists(modsDir))
-            await Task.Run(() => ZipFile.CreateFromDirectory(modsDir, backupPath, CompressionLevel.Fastest, false));
-
-        _logger.LogInformation("Created Mods backup at {Path}", backupPath);
-        return backupPath;
-    }
-
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>

@@ -13,8 +13,6 @@ public class AppSettings : PublicSettings
 
     public bool AutoCheckUpdatesOnStartup { get; set; } = true;
 
-    public bool BackupBeforeChanges { get; set; } = true;
-
     public bool EnableVersionArchiving { get; set; } = true;
 
     /// <summary>Maximum combined size of all version archives before pruning. Default 5 GB.</summary>

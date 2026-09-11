@@ -80,7 +80,7 @@
                                FontWeight="SemiBold"
                                Foreground="#cdd6f4" />
 
-                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" VerticalAlignment="Center">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" VerticalAlignment="Center">
                         <TextBlock Grid.Row="0" Grid.Column="0"
                                    Text="{conv:Localize settings.auto_check_updates}"
                                    Foreground="#cdd6f4"
@@ -91,44 +91,23 @@
                                   HorizontalAlignment="Right" />
 
                         <TextBlock Grid.Row="1" Grid.Column="0"
-                                   Text="{conv:Localize settings.backup_before_changes}"
-                                   Foreground="#cdd6f4"
-                                   FontSize="13"
-                                   VerticalAlignment="Center"
-                                   Margin="0,8,0,0" />
-                        <StackPanel Grid.Row="1" Grid.Column="1"
-                                    Orientation="Horizontal"
-                                    HorizontalAlignment="Right"
-                                    Spacing="6"
-                                    Margin="0,8,0,0">
-                            <Button Content="{conv:Localize settings.backup_folder_button}"
-                                    Command="{Binding OpenBackupFolderCommand}"
-                                    Background="#313244"
-                                    Foreground="#cdd6f4"
-                                    Padding="8,3"
-                                    FontSize="12" />
-                            <CheckBox IsChecked="{Binding BackupBeforeChanges, Mode=TwoWay}"
-                                      HorizontalAlignment="Right" />
-                        </StackPanel>
-
-                        <TextBlock Grid.Row="2" Grid.Column="0"
                                    Text="{conv:Localize settings.enable_version_archiving}"
                                    Foreground="#cdd6f4"
                                    FontSize="13"
                                    VerticalAlignment="Center"
                                    Margin="0,8,0,0" />
-                        <CheckBox Grid.Row="2" Grid.Column="1"
+                        <CheckBox Grid.Row="1" Grid.Column="1"
                                   IsChecked="{Binding EnableVersionArchiving, Mode=TwoWay}"
                                   HorizontalAlignment="Right"
                                   Margin="0,8,0,0" />
 
-                        <TextBlock Grid.Row="3" Grid.Column="0"
+                        <TextBlock Grid.Row="2" Grid.Column="0"
                                    Text="{conv:Localize settings.max_cache_size}"
                                    Foreground="#cdd6f4"
                                    FontSize="13"
                                    VerticalAlignment="Center"
                                    Margin="0,8,0,0" />
-                        <NumericUpDown Grid.Row="3" Grid.Column="1"
+                        <NumericUpDown Grid.Row="2" Grid.Column="1"
                                        Value="{Binding MaxCacheGb, Mode=TwoWay}"
                                        Minimum="1" Maximum="100"
                                        Increment="1"
@@ -139,13 +118,13 @@
                                        HorizontalAlignment="Right"
                                        Margin="0,8,0,0" />
 
-                        <TextBlock Grid.Row="4" Grid.Column="0"
+                        <TextBlock Grid.Row="3" Grid.Column="0"
                                    Text="{conv:Localize settings.language}"
                                    Foreground="#cdd6f4"
                                    FontSize="13"
                                    VerticalAlignment="Center"
                                    Margin="0,8,0,0" />
-                        <ComboBox Grid.Row="4" Grid.Column="1"
+                        <ComboBox Grid.Row="3" Grid.Column="1"
                                   ItemsSource="{Binding AvailableLanguages}"
                                   SelectedItem="{Binding Language, Mode=TwoWay}"
                                   Background="#313244"

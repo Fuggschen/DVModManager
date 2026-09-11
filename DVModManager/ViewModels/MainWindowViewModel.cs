@@ -1017,13 +1017,6 @@ public partial class MainWindowViewModel : ViewModelBase
             _localization.GetString("dialog.update_all_message", modsWithUpdates.Count));
         if (!confirmed) return;
 
-        // Backup first
-        if (_settings.Settings.GamePath != null && _settings.Settings.BackupBeforeChanges)
-        {
-            SetBusy(_localization.GetString("busy.creating_backup"));
-            await _modInstall.BackupModsFolderAsync(_settings.Settings.GamePath, _settings.Settings.StoragePath);
-        }
-
         int updated = 0;
         foreach (var mod in modsWithUpdates)
         {
@@ -1372,13 +1365,6 @@ public partial class MainWindowViewModel : ViewModelBase
             await _settings.SaveAsync();
             StatusMessage = _localization.GetString("status.profile_applied", profileName);
             return;
-        }
-
-        // Backup before bulk change
-        if (_settings.Settings.BackupBeforeChanges)
-        {
-            SetBusy(_localization.GetString("busy.creating_backup"));
-            await _modInstall.BackupModsFolderAsync(_settings.Settings.GamePath, _settings.Settings.StoragePath);
         }
 
         // Apply changes
