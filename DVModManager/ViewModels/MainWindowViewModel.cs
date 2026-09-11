@@ -914,6 +914,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (success)
         {
+            // Remove from groups before refresh to prevent ghost entries
+            var modId = SelectedMod.Id;
+            foreach (var g in _settings.Settings.ModGroups)
+                g.ModIds.Remove(modId);
+            await _settings.SaveAsync();
+
             await RefreshModsAsync();
             StatusMessage = _localization.GetString("status.uninstalled", displayName);
         }
