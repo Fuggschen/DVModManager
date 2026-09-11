@@ -1259,7 +1259,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
             var reConfirmed = await _dialogService.ConfirmAsync(
                 _localization.GetString("dialog.redownload_title"),
-                string.Join("\n", reLines) + "\n\n" + _localization.GetString("dialog.redownload_proceed"));
+                string.Join("\n", reLines) + "\n\n" + _localization.GetString("dialog.redownload_proceed"),
+                _localization.GetString("dialog.button.rollback_versions"),
+                _localization.GetString("dialog.button.keep_current"));
 
             if (reConfirmed)
             {

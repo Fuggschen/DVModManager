@@ -53,6 +53,8 @@ settings.button.save,Save,Speichern,Enregistrer,
 dialog.button.ok,OK,OK,OK,
 dialog.button.yes,Yes,Ja,Oui,
 dialog.button.no,No,Nein,Non,
+dialog.button.rollback_versions,Rollback Versions,Versionen zurücksetzen,Restaurer les versions,回滚版本
+dialog.button.keep_current,Keep Current Versions,Aktuelle Versionen behalten,Conserver les versions actuelles,保留当前版本
 dialog.uninstall_title,Uninstall Mod,Mod deinstallieren,Désinstaller le mod,
 dialog.uninstall_message,"Remove ''{0}''? The current version will be archived for rollback, then deleted.","„{0}"" entfernen? Die aktuelle Version wird zur Wiederherstellung archiviert und dann gelöscht.","Supprimer « {0} » ? La version actuelle sera archivée pour restauration, puis supprimée.",
 dialog.update_all_title,Update All,Alle aktualisieren,Mettre à jour tout,
