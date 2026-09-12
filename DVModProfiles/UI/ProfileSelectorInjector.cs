@@ -1,5 +1,3 @@
-using System;
-using System.Linq;
 using System.Reflection;
 using DV.Common;
 using DV.UI;
@@ -20,6 +18,8 @@ internal static class ProfileSelectorInjector
     {
         private static void Postfix(ContinueLoadNewControllerSingle __instance)
         {
+            SettingsAutoCapture.ForgetSession();
+
             if (__instance.GetComponent<ProfileSelectorWidget>() != null)
             {
                 return;
@@ -77,6 +77,7 @@ internal static class ProfileSelectorInjector
         string? profileName = SaveAssociations.Get(session);
         if (profileName == null)
         {
+            SettingsAutoCapture.ForgetSession();
             return true;
         }
 
@@ -87,6 +88,7 @@ internal static class ProfileSelectorInjector
         if (active == null || string.Equals(profileName, active, StringComparison.Ordinal))
         {
             SettingsApplier.Apply(profileName);
+            SettingsAutoCapture.TrackSession(profileName);
             return true;
         }
 
@@ -95,6 +97,7 @@ internal static class ProfileSelectorInjector
             Main.Logger.Warning($"Session is associated with profile '{profileName}' but the mod manager has " +
                                 $"'{active}' applied, and no popup is available to ask; loading anyway.");
             SettingsApplier.Apply(profileName);
+            SettingsAutoCapture.ForgetSession();
             return true;
         }
 
@@ -131,6 +134,7 @@ internal static class ProfileSelectorInjector
                         break;
                     case PopupClosedByAction.Negative:
                         SettingsApplier.Apply(profileName);
+                        SettingsAutoCapture.ForgetSession();
                         bypassGate = true;
                         Reinvoke(menu, methodName, argument);
                         break;
