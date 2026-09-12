@@ -896,6 +896,15 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand(CanExecute = nameof(CanModify))]
+    private void OpenModFolder()
+    {
+        if (SelectedMod == null) return;
+        var folderPath = SelectedMod.ModInfo.FolderPath;
+        if (!string.IsNullOrEmpty(folderPath) && Directory.Exists(folderPath))
+            Helpers.PlatformHelper.Open(folderPath);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanModify))]
     private async Task UninstallSelectedModAsync()
     {
         if (SelectedMod == null || _settings.Settings.GamePath == null) return;

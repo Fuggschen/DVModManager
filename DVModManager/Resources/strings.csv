@@ -134,6 +134,7 @@ badge.update,UPDATE,AKTUALISIERUNG,MISE À JOUR,
 link.homepage,🌐 HomePage,🌐 Startseite,🌐 Page d'accueil,
 link.repository,📦 Repository,📦 Repository,📦 Référentiel,
 mod.missing_dependencies,Missing Dependencies,Fehlende Abhängigkeiten,Dépendances manquantes,
+button.open_folder,📂 Open Folder,📂 Ordner öffnen,📂 Ouvrir le dossier,📂 打开文件夹
 button.uninstall,✕ Uninstall,✕ Deinstallieren,✕ Désinstaller,
 button.update,↑ Update,↑ Aktualisieren,↑ Mettre à jour,
 menu.version_history,Version History,Versionsverlauf,Historique des versions,

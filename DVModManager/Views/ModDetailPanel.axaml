@@ -137,6 +137,12 @@
                                 Foreground="#1e1e2e"
                                 Padding="10,4" />
 
+                        <Button Content="{conv:Localize button.open_folder}"
+                                Command="{Binding OpenModFolderCommand}"
+                                Background="#45475a"
+                                Foreground="#cdd6f4"
+                                Padding="10,4" />
+
                         <Button Content="{conv:Localize button.uninstall}"
                                 Command="{Binding UninstallSelectedModCommand}"
                                 Background="#f38ba8"
