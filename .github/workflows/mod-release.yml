@@ -1,12 +1,11 @@
 name: Release
+permissions:
+  contents: write
 
 on:
   push:
     tags:
       - 'dvmodprofiles-v*'
-
-permissions:
-  contents: write
 
 jobs:
   release:
@@ -21,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Verify tag matches info.json version
         shell: powershell
