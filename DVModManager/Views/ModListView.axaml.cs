@@ -430,13 +430,53 @@ public partial class ModListView : UserControl
         s_dragPayload = null;
         if (payload == null || payload.Count == 0) return;
 
-        // Walk up from the drop source to find a ListBoxItem
-        var lbItem = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true);
-        string? groupId = lbItem?.DataContext is ModGroupHeaderViewModel hvm ? hvm.GroupId : null;
-
         if (DataContext is MainWindowViewModel vm)
+        {
+            // Determine which panel the mods were dragged from and which they were dropped on
+            bool allInactive = payload.All(m => !m.IsActive);
+            bool allActive   = payload.All(m => m.IsActive);
+
+            // Cross-panel: dropping inactive mods on the active panel → activate
+            if (allInactive && Panel == "active")
+            {
+                _ = ActivateDroppedModsAsync(vm, payload);
+                e.Handled = true;
+                return;
+            }
+
+            // Cross-panel: dropping active mods on the inactive panel → deactivate
+            if (allActive && Panel == "available")
+            {
+                _ = DeactivateDroppedModsAsync(vm, payload);
+                e.Handled = true;
+                return;
+            }
+
+            // Same-panel: assign to group
+            var lbItem = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true);
+            string? groupId = lbItem?.DataContext is ModGroupHeaderViewModel hvm ? hvm.GroupId : null;
             _ = vm.AssignModsToGroupAsync(payload.Select(m => m.Id), groupId);
+        }
 
         e.Handled = true;
+    }
+
+    private static async Task ActivateDroppedModsAsync(MainWindowViewModel vm, List<ModItemViewModel> mods)
+    {
+        foreach (var mod in mods)
+        {
+            // Temporarily set selected mod so the command uses it
+            vm.SelectedMod = mod;
+            await vm.ActivateSelectedModCommand.ExecuteAsync(null);
+        }
+    }
+
+    private static async Task DeactivateDroppedModsAsync(MainWindowViewModel vm, List<ModItemViewModel> mods)
+    {
+        foreach (var mod in mods)
+        {
+            vm.SelectedMod = mod;
+            await vm.DeactivateSelectedModCommand.ExecuteAsync(null);
+        }
     }
 }
