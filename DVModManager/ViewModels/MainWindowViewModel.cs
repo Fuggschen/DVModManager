@@ -431,6 +431,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     target.State = ModState.MissingDependency;
                     target.HasMissingDependency = true;
+                    target.MissingDependencyIds = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
+                    target.RefreshDisplayRequirements();
                     missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
                     continue;
                 }
@@ -461,6 +463,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     target.State = ModState.MissingDependency;
                     target.HasMissingDependency = true;
+                    target.MissingDependencyIds = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
+                    target.RefreshDisplayRequirements();
                     missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
                     continue;
                 }
@@ -488,6 +492,8 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             mod.State = ModState.MissingDependency;
             mod.HasMissingDependency = true;
+            mod.MissingDependencyIds = new HashSet<string>(trulyMissing, StringComparer.OrdinalIgnoreCase);
+            mod.RefreshDisplayRequirements();
             StatusMessage = _localization.GetString("status.missing_dependencies", displayName, string.Join(", ", trulyMissing));
             return;
         }
@@ -1659,7 +1665,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_settings.Settings.GamePath == null) return [];
 
-        var activeIds = ActiveMods.Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var activeMap = ActiveMods.ToDictionary(m => m.Id, m => m.Version, StringComparer.OrdinalIgnoreCase);
         // Use last-write-wins to handle any duplicates (e.g. mods with empty Id)
         var inactiveMap = new Dictionary<string, ModItemViewModel>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in AvailableMods)
@@ -1677,31 +1683,47 @@ public partial class MainWindowViewModel : ViewModelBase
 
         while (queue.Count > 0)
         {
-            var depId = queue.Dequeue();
-            if (string.IsNullOrEmpty(depId) || !processed.Add(depId)) continue;
-            if (activeIds.Contains(depId)) continue;
+            var req = queue.Dequeue();
+            if (string.IsNullOrEmpty(req) || !processed.Add(req)) continue;
+
+            ParseRequirement(req, out var depId, out var minVersion);
+
+            // Check if already active with a sufficient version
+            if (activeMap.TryGetValue(depId, out var activeVersion))
+            {
+                if (minVersion != null && !MeetsMinVersion(activeVersion, minVersion))
+                    trulyMissing.Add(req); // Active but version too old
+                continue;
+            }
 
             if (inactiveMap.TryGetValue(depId, out var depVm))
             {
+                // If a minimum version is required, check the available version too
+                if (minVersion != null && !MeetsMinVersion(depVm.Version, minVersion))
+                {
+                    trulyMissing.Add(req);
+                    continue;
+                }
+
                 BusyMessage = _localization.GetString("busy.activating_dependency", depVm.DisplayName);
                 var ok = await _modInstall.ActivateModAsync(depVm.ModInfo, _settings.Settings.GamePath);
                 if (ok)
                 {
                     depVm.SyncFromModel();
                     activated.Add(depVm);
-                    activeIds.Add(depId);
+                    activeMap[depId] = depVm.Version;
                     // Enqueue this dependency's own requirements for transitive resolution
                     foreach (var subReq in depVm.Requirements)
                         queue.Enqueue(subReq);
                 }
                 else
                 {
-                    trulyMissing.Add(depId);
+                    trulyMissing.Add(req);
                 }
             }
             else
             {
-                trulyMissing.Add(depId);
+                trulyMissing.Add(req);
             }
         }
 
@@ -1717,19 +1739,39 @@ public partial class MainWindowViewModel : ViewModelBase
         return trulyMissing;
     }
 
-    private bool ValidateDependencies(ModItemViewModel vm)
+    /// <summary>
+    /// Parses a UMM requirement string. Format: "ModId" or "ModId-Version".
+    /// The version is appended after the last hyphen that precedes a digit.
+    /// </summary>
+    private static void ParseRequirement(string requirement, out string modId, out string? minVersion)
     {
-        var allActive = ActiveMods.Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var missing = vm.Requirements
-            .Where(r => !allActive.Contains(r))
-            .ToList();
+        modId = requirement;
+        minVersion = null;
 
-        if (missing.Count == 0) return true;
+        // Find the last '-' followed by a digit (version separator)
+        for (int i = requirement.Length - 1; i > 0; i--)
+        {
+            if (requirement[i] == '-' && i + 1 < requirement.Length && char.IsDigit(requirement[i + 1]))
+            {
+                modId = requirement[..i];
+                minVersion = requirement[(i + 1)..];
+                return;
+            }
+        }
+    }
 
-        vm.State = ModState.MissingDependency;
-        vm.HasMissingDependency = true;
-        StatusMessage = _localization.GetString("status.missing_dependencies", vm.DisplayName, string.Join(", ", missing));
-        return false;
+    /// <summary>
+    /// Returns true when <paramref name="installedVersion"/> meets or exceeds <paramref name="minVersion"/>.
+    /// Returns true if either version cannot be parsed (permissive fallback).
+    /// </summary>
+    private static bool MeetsMinVersion(string installedVersion, string minVersion)
+    {
+        if (Version.TryParse(installedVersion, out var installed) &&
+            Version.TryParse(minVersion, out var required))
+            return installed >= required;
+
+        // Cannot compare — permissive (don't block activation)
+        return true;
     }
 
     private async Task PromptGamePathAsync()

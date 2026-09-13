@@ -6,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DVModManager.ViewModels;
 
+public record DependencyDisplayItem(string Requirement, bool IsMissing);
+
 public partial class ModItemViewModel : ViewModelBase
 {
     private readonly ModInfo _modInfo;
@@ -49,6 +51,16 @@ public partial class ModItemViewModel : ViewModelBase
     [ObservableProperty] private string? _repository;
     [ObservableProperty] private string? _description;
     [ObservableProperty] private string[] _requirements = [];
+
+    /// <summary>IDs of requirements that are actually missing (for display highlighting).</summary>
+    public HashSet<string> MissingDependencyIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Requirements paired with their missing status for display.</summary>
+    public List<DependencyDisplayItem> DisplayRequirements =>
+        Requirements.Select(r => new DependencyDisplayItem(r, MissingDependencyIds.Contains(r))).ToList();
+
+    /// <summary>Notifies the UI that DisplayRequirements has changed.</summary>
+    public void RefreshDisplayRequirements() => OnPropertyChanged(nameof(DisplayRequirements));
 
     /// <summary>Set by ApplyGroupedFilters to indicate which group this item belongs to.</summary>
     public string? GroupId { get; set; }
