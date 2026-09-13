@@ -112,11 +112,11 @@
                                    Foreground="#f38ba8"
                                    FontSize="12"
                                    FontWeight="SemiBold" />
-                        <ItemsControl ItemsSource="{Binding SelectedMod.Requirements}">
+                        <ItemsControl ItemsSource="{Binding SelectedMod.DisplayRequirements}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="x:String">
-                                    <TextBlock Text="{Binding}"
-                                               Foreground="#fab387"
+                                <DataTemplate x:DataType="vm:DependencyDisplayItem">
+                                    <TextBlock Text="{Binding Requirement}"
+                                               Foreground="{Binding IsMissing, Converter={x:Static conv:DependencyColorConverter.Instance}}"
                                                FontSize="11"
                                                Margin="8,1,0,0" />
                                 </DataTemplate>
@@ -135,6 +135,12 @@
                                 IsVisible="{Binding SelectedMod.HasUpdate}"
                                 Background="#f39c12"
                                 Foreground="#1e1e2e"
+                                Padding="10,4" />
+
+                        <Button Content="{conv:Localize button.open_folder}"
+                                Command="{Binding OpenModFolderCommand}"
+                                Background="#45475a"
+                                Foreground="#cdd6f4"
                                 Padding="10,4" />
 
                         <Button Content="{conv:Localize button.uninstall}"

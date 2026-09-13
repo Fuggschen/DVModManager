@@ -15,10 +15,7 @@ public partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty] private string _gamePath = "";
     [ObservableProperty] private string _storagePath = "";
-    [ObservableProperty] private string _nexusApiKey = "";
-    [ObservableProperty] private string _gitHubToken = "";
     [ObservableProperty] private bool _autoCheckUpdates = true;
-    [ObservableProperty] private bool _backupBeforeChanges = true;
     [ObservableProperty] private bool _enableVersionArchiving = true;
     [ObservableProperty] private int _maxCacheGb = 5;
     [ObservableProperty] private string _themeVariant = "Dark";
@@ -53,10 +50,7 @@ public partial class SettingsViewModel : ViewModelBase
     {
         GamePath = settings.GamePath ?? "";
         StoragePath = settings.StoragePath;
-        NexusApiKey = settings.NexusApiKey ?? "";
-        GitHubToken = settings.GitHubToken ?? "";
         AutoCheckUpdates = settings.AutoCheckUpdatesOnStartup;
-        BackupBeforeChanges = settings.BackupBeforeChanges;
         EnableVersionArchiving = settings.EnableVersionArchiving;
         MaxCacheGb = (int)(settings.MaxCacheSizeBytes / (1024 * 1024 * 1024));
         ThemeVariant = settings.ThemeVariant;
@@ -68,10 +62,7 @@ public partial class SettingsViewModel : ViewModelBase
     {
         settings.GamePath = string.IsNullOrWhiteSpace(GamePath) ? null : GamePath;
         settings.StoragePath = StoragePath;
-        settings.NexusApiKey = string.IsNullOrWhiteSpace(NexusApiKey) ? null : NexusApiKey;
-        settings.GitHubToken = string.IsNullOrWhiteSpace(GitHubToken) ? null : GitHubToken;
         settings.AutoCheckUpdatesOnStartup = AutoCheckUpdates;
-        settings.BackupBeforeChanges = BackupBeforeChanges;
         settings.EnableVersionArchiving = EnableVersionArchiving;
         settings.MaxCacheSizeBytes = (long)MaxCacheGb * 1024 * 1024 * 1024;
         settings.ThemeVariant = ThemeVariant;
@@ -109,14 +100,6 @@ public partial class SettingsViewModel : ViewModelBase
     {
         var path = await _dialogService.PickFolderAsync(_localization!.GetString("dialog.select_storage_folder"));
         if (path != null) StoragePath = path;
-    }
-
-    [RelayCommand]
-    private void OpenBackupFolder()
-    {
-        var backupDir = Path.Combine(StoragePath, "backups");
-        Directory.CreateDirectory(backupDir);
-        Helpers.PlatformHelper.Open(backupDir);
     }
 
     [RelayCommand]

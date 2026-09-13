@@ -117,6 +117,9 @@ public class DialogService : IDialogService
     }
 
     public async Task<bool> ConfirmAsync(string title, string message)
+        => await ConfirmAsync(title, message, _loc.GetString("dialog.button.yes"), _loc.GetString("dialog.button.no"));
+
+    public async Task<bool> ConfirmAsync(string title, string message, string confirmLabel, string cancelLabel)
     {
         if (_owner == null) return false;
 
@@ -125,16 +128,16 @@ public class DialogService : IDialogService
         var dialog = new Window
         {
             Title = title,
-            Width = 420,
+            MinWidth = 420,
             MaxHeight = 600,
-            SizeToContent = SizeToContent.Height,
+            SizeToContent = SizeToContent.WidthAndHeight,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
 
         // We'll close the dialog from the button callbacks via a TaskCompletionSource
         var tcs = new TaskCompletionSource<bool>();
-        dialog.Content = BuildConfirmContent(message, answer =>
+        dialog.Content = BuildConfirmContent(message, confirmLabel, cancelLabel, answer =>
         {
             result = answer;
             dialog.Close();
@@ -166,10 +169,10 @@ public class DialogService : IDialogService
         };
     }
 
-    private Avalonia.Controls.Control BuildConfirmContent(string message, Action<bool> callback)
+    private Avalonia.Controls.Control BuildConfirmContent(string message, string confirmLabel, string cancelLabel, Action<bool> callback)
     {
-        var okBtn = new Button { Content = _loc.GetString("dialog.button.yes"), Width = 80 };
-        var cancelBtn = new Button { Content = _loc.GetString("dialog.button.no"), Width = 80 };
+        var okBtn = new Button { Content = confirmLabel, Padding = new Avalonia.Thickness(16, 6) };
+        var cancelBtn = new Button { Content = cancelLabel, Padding = new Avalonia.Thickness(16, 6) };
 
         okBtn.Click += (_, _) => callback(true);
         cancelBtn.Click += (_, _) => callback(false);

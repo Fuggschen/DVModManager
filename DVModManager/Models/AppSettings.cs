@@ -4,8 +4,6 @@ public class AppSettings : PublicSettings
 {
     public string? GamePath { get; set; }
 
-    public string? NexusApiKey { get; set; }
-    public string? GitHubToken { get; set; }
 
     /// <summary>"Dark" or "Light"</summary>
     public string ThemeVariant { get; set; } = "Dark";
@@ -14,8 +12,6 @@ public class AppSettings : PublicSettings
     public string Language { get; set; } = "en";
 
     public bool AutoCheckUpdatesOnStartup { get; set; } = true;
-
-    public bool BackupBeforeChanges { get; set; } = true;
 
     public bool EnableVersionArchiving { get; set; } = true;
 

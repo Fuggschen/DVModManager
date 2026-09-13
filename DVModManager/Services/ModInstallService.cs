@@ -423,6 +423,10 @@ public class ModInstallService : IModInstallService
             // 4. Install — preserves active/inactive state
             var result = await InstallFromArchiveAsync(
                 downloadPath, gamePath, storagePath, mod.IsActive, ct);
+
+            // 5. Clean up downloaded zip after successful install
+            try { File.Delete(downloadPath); } catch { /* best-effort */ }
+
             return result != null;
         }
         catch (Exception ex)
@@ -478,24 +482,6 @@ public class ModInstallService : IModInstallService
             _logger.LogError(ex, "DownloadAndInstall failed for URL {Url}", downloadUrl);
             return null;
         }
-    }
-
-    // ── Backup whole Mods folder ──────────────────────────────────────────────
-
-    public async Task<string> BackupModsFolderAsync(string gamePath, string storagePath)
-    {
-        var modsDir = Path.Combine(gamePath, "Mods");
-        var backupsDir = Path.Combine(storagePath, "backups");
-        Directory.CreateDirectory(backupsDir);
-
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-        var backupPath = Path.Combine(backupsDir, $"Mods_backup_{timestamp}.zip");
-
-        if (Directory.Exists(modsDir))
-            await Task.Run(() => ZipFile.CreateFromDirectory(modsDir, backupPath, CompressionLevel.Fastest, false));
-
-        _logger.LogInformation("Created Mods backup at {Path}", backupPath);
-        return backupPath;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
