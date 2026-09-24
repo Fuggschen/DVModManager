@@ -12,10 +12,10 @@ public class VersionCacheService : IVersionCacheService
     {
         if (!Directory.Exists(mod.FolderPath)) return;
 
-        var modVersionDir = Path.Combine(storagePath, "versions", mod.Id);
+        var modVersionDir = Path.Combine(storagePath, "versions", SanitizeFileName(mod.Id));
         Directory.CreateDirectory(modVersionDir);
 
-        var safeVersion = mod.Version.Replace(' ', '_').Replace('/', '_');
+        var safeVersion = SanitizeFileName(mod.Version);
         var archivePath = Path.Combine(modVersionDir, $"{safeVersion}.zip");
 
         // Overwrite any existing archive for this version
@@ -70,7 +70,7 @@ public class VersionCacheService : IVersionCacheService
         if (File.Exists(entry.ArchivePath)) File.Delete(entry.ArchivePath);
         versions.Remove(entry);
 
-        var manifestDir = Path.Combine(storagePath, "versions", modId);
+        var manifestDir = Path.Combine(storagePath, "versions", SanitizeFileName(modId));
         await SaveManifestAsync(modId, manifestDir, versions);
     }
 
@@ -110,8 +110,31 @@ public class VersionCacheService : IVersionCacheService
         }
     }
 
+    /// <summary>Characters invalid in file names on either Windows or Unix (M3).</summary>
+    private static readonly char[] AlwaysInvalidFileNameChars =
+        { ':', '*', '?', '"', '<', '>', '|', '/', '\\' };
+
+    /// <summary>
+    /// Replaces every character that is invalid on any OS (plus spaces), so archive
+    /// names stay valid and identical no matter where the manager runs (M3).
+    /// </summary>
+    private static string SanitizeFileName(string value)
+    {
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var c in value)
+        {
+            if (c == ' ' || Array.IndexOf(AlwaysInvalidFileNameChars, c) >= 0)
+                builder.Append('_');
+            else if (c < 32) // control characters are never safe
+                builder.Append('_');
+            else
+                builder.Append(c);
+        }
+        return builder.Length == 0 ? "unknown" : builder.ToString();
+    }
+
     private static string GetManifestPath(string modId, string storagePath) =>
-        Path.Combine(storagePath, "versions", modId, "versions.json");
+        Path.Combine(storagePath, "versions", SanitizeFileName(modId), "versions.json");
 
     private static async Task SaveManifestAsync(string modId, string modVersionDir, List<ModVersion> versions)
     {
