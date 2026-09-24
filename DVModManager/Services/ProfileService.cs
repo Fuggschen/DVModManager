@@ -159,8 +159,11 @@ public class ProfileService : IProfileService
             }
         }
 
-        // Deactivate any mods that aren't in the profile at all
-        var profileModIds = profile.Mods.Select(m => m.ModId).ToHashSet();
+        // Deactivate any mods that aren't in the profile at all.
+        // Compare case-insensitively — currentById lookup is OrdinalIgnoreCase too,
+        // so a casing difference must not deactivate an active mod (H2).
+        var profileModIds = profile.Mods.Select(m => m.ModId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var mod in currentMods.Where(m => m.IsActive && !profileModIds.Contains(m.Id)))
             toDeactivate.Add(mod.Id);
 
