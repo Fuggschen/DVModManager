@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 
 namespace DVModManager.Services;
 
@@ -8,13 +9,15 @@ public sealed class GameDetectionService : IGameDetectionService
 {
     private const string ProcessName = "DerailValley";
 
+    private readonly ILogger<GameDetectionService> _logger;
     private readonly Timer _pollingTimer;
     private bool _lastRunningState;
 
     public event EventHandler<bool>? GameRunningChanged;
 
-    public GameDetectionService()
+    public GameDetectionService(ILogger<GameDetectionService> logger)
     {
+        _logger = logger;
         _lastRunningState = IsGameRunning();
         _pollingTimer = new Timer(Poll, null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
     }
@@ -118,7 +121,11 @@ public sealed class GameDetectionService : IGameDetectionService
             if (key?.GetValue("InstallPath") is not string steamPath) return null;
             return FindDerailValleyInLibraries(steamPath);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Registry-based Steam detection failed");
+            return null;
+        }
     }
 
     private string? DetectViaSteamConfigFile()
@@ -155,7 +162,7 @@ public sealed class GameDetectionService : IGameDetectionService
         return null;
     }
 
-    private static List<string> ParseLibraryFolders(string vdfPath)
+    private List<string> ParseLibraryFolders(string vdfPath)
     {
         var paths = new List<string>();
         try
@@ -168,7 +175,11 @@ public sealed class GameDetectionService : IGameDetectionService
                 if (Directory.Exists(path)) paths.Add(path);
             }
         }
-        catch { /* ignore VDF parse errors */ }
+        catch (Exception ex)
+        {
+            // Corrupt VDF silently skipping all libraries would hide real paths (H13)
+            _logger.LogWarning(ex, "Failed to parse {Path}", vdfPath);
+        }
         return paths;
     }
 

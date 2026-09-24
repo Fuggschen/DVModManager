@@ -1,13 +1,18 @@
 using System.Text.Json;
 using DVModManager.Helpers;
 using DVModManager.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DVModManager.Services;
 
 public sealed class ModDiscoveryService : IModDiscoveryService
 {
+    private readonly ILogger<ModDiscoveryService> _logger;
+
     private FileSystemWatcher? _activeWatcher;
     private FileSystemWatcher? _inactiveWatcher;
+
+    public ModDiscoveryService(ILogger<ModDiscoveryService> logger) => _logger = logger;
 
     public event EventHandler? ModsChanged;
 
@@ -86,8 +91,10 @@ public sealed class ModDiscoveryService : IModDiscoveryService
                 var json = await File.ReadAllTextAsync(infoPath);
                 mod = JsonSerializer.Deserialize<ModInfo>(json, JsonOptions) ?? new ModInfo();
             }
-            catch
+            catch (Exception ex)
             {
+                // A corrupt Info.json should be visible in the log, not silently hidden (H13)
+                _logger.LogWarning(ex, "Failed to parse {Path}; treating folder as metadata-less", infoPath);
                 mod = new ModInfo
                 {
                     Id = Path.GetFileName(folderPath),
@@ -127,7 +134,11 @@ public sealed class ModDiscoveryService : IModDiscoveryService
             watcher.Deleted += OnFileSystemChange;
             watcher.Renamed += OnFileSystemChange;
         }
-        catch { /* watch is optional */ }
+        catch (Exception ex)
+        {
+            // Watching is optional, but the reason it failed should not be lost (H13)
+            _logger.LogWarning(ex, "Could not watch {Path} for changes", path);
+        }
     }
 
     private CancellationTokenSource? _debounceCts;

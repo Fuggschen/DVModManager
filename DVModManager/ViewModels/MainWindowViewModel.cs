@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using DVModManager.Models;
 using DVModManager.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace DVModManager.ViewModels;
 
@@ -23,6 +24,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly IUpdateService _updateService;
     private readonly IDialogService _dialogService;
     private readonly ILocalizationService _localization;
+    private readonly Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> _logger;
 
     // ── Observable state ──────────────────────────────────────────────────────
     [ObservableProperty] private ObservableCollection<ModItemViewModel> _availableMods = [];
@@ -121,8 +123,10 @@ public partial class MainWindowViewModel : ViewModelBase
         IProfileService profileService,
         IUpdateService updateService,
         IDialogService dialogService,
-        ILocalizationService localization)
+        ILocalizationService localization,
+        Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> logger)
     {
+        _logger = logger;
         _settings = settings;
         _gameDetection = gameDetection;
         _modDiscovery = modDiscovery;
@@ -610,8 +614,9 @@ public partial class MainWindowViewModel : ViewModelBase
                 await RefreshProfileListAsync();
                 StatusMessage = _localization.GetString("status.modpack_imported", uniqueName);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Profile import from {Path} failed", paths[0]);
                 StatusMessage = _localization.GetString("status.modpack_import_failed");
             }
             return;
@@ -677,11 +682,13 @@ public partial class MainWindowViewModel : ViewModelBase
                     }
                     finally
                     {
-                        try { Directory.Delete(tempDir, true); } catch { }
+                        try { Directory.Delete(tempDir, true); }
+                        catch (Exception ex) { _logger.LogDebug(ex, "Cleanup of {Path} failed", tempDir); }
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _logger.LogWarning(ex, "Modpack import from {Path} failed", zipPaths[0]);
                     ClearBusy();
                     StatusMessage = _localization.GetString("status.modpack_import_failed");
                 }
@@ -970,8 +977,9 @@ public partial class MainWindowViewModel : ViewModelBase
             ClearBusy();
             StatusMessage = _localization.GetString("status.companion_installed");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Companion mod install failed");
             ClearBusy();
             StatusMessage = _localization.GetString("status.companion_install_failed");
         }
@@ -1514,7 +1522,7 @@ public partial class MainWindowViewModel : ViewModelBase
             if (!string.IsNullOrEmpty(folderPath) && Directory.Exists(folderPath))
             {
                 try { Directory.Delete(folderPath, true); }
-                catch { /* best-effort */ }
+                catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete mod folder {Path}", folderPath); }
             }
         }
 
@@ -1927,9 +1935,10 @@ public partial class MainWindowViewModel : ViewModelBase
             HasManagerUpdate = true;
             UpdateAppVersionLabel();
         }
-        catch
+        catch (Exception ex)
         {
-            // Silent — don't bother the user if the check fails
+            // Silent — don't bother the user, but do record the reason (H13)
+            _logger.LogDebug(ex, "Manager update check failed");
         }
     }
 
