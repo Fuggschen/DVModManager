@@ -812,6 +812,66 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Activates exactly the given mods (each with dependency resolution).
+    /// Used by drag & drop instead of ActivateSelectedModCommand, which would
+    /// re-run the whole checked set on every invocation (H11).
+    /// </summary>
+    public async Task ActivateModsAsync(IReadOnlyList<ModItemViewModel> mods)
+    {
+        if (_settings.Settings.GamePath == null || mods.Count == 0) return;
+
+        SetBusy(_localization.GetString("status.activating_group", mods.Count));
+        int activated = 0;
+        var missingDeps = new List<string>();
+
+        foreach (var target in mods.ToList())
+        {
+            if (target.IsActive) continue;
+
+            var missing = await AutoActivateDependenciesAsync(target);
+            if (missing.Count > 0)
+            {
+                target.State = ModState.MissingDependency;
+                target.HasMissingDependency = true;
+                target.MissingDependencyIds = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
+                target.RefreshDisplayRequirements();
+                missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
+                continue;
+            }
+
+            var success = await _modInstall.ActivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+            if (success) { target.SyncFromModel(); MoveToActive(target); activated++; }
+        }
+
+        ClearBusy();
+        StatusMessage = missingDeps.Count > 0
+            ? _localization.GetString("status.activated_simple_missing_deps", activated, mods.Count, string.Join("; ", missingDeps))
+            : _localization.GetString("status.activated_simple", activated, mods.Count);
+    }
+
+    /// <summary>
+    /// Deactivates exactly the given mods (see <see cref="ActivateModsAsync"/> for rationale, H11).
+    /// </summary>
+    public async Task DeactivateModsAsync(IReadOnlyList<ModItemViewModel> mods)
+    {
+        if (_settings.Settings.GamePath == null || mods.Count == 0) return;
+
+        SetBusy(_localization.GetString("status.deactivating_group", mods.Count));
+        int deactivated = 0;
+
+        foreach (var target in mods.ToList())
+        {
+            if (!target.IsActive) continue;
+
+            var success = await _modInstall.DeactivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+            if (success) { target.SyncFromModel(); MoveToInactive(target); deactivated++; }
+        }
+
+        ClearBusy();
+        StatusMessage = _localization.GetString("status.deactivated_simple", deactivated, mods.Count);
+    }
+
     private bool CanInstallCompanion() => !IsCompanionModInstalled || IsCompanionModInactive;
 
     private void RecheckCompanionCanExecute()
