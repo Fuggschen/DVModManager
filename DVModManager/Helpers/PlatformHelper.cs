@@ -18,7 +18,14 @@ public static class PlatformHelper
             }
             else if (OperatingSystem.IsLinux())
             {
-                Process.Start("xdg-open", pathOrUrl);
+                // ArgumentList keeps paths with spaces/metacharacters as one argument (H5)
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "xdg-open",
+                    UseShellExecute = false
+                };
+                psi.ArgumentList.Add(pathOrUrl);
+                Process.Start(psi);
             }
         }
         catch
