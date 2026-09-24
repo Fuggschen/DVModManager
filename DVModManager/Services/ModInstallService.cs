@@ -139,7 +139,7 @@ public class ModInstallService : IModInstallService
         var tempDir = Path.Combine(Path.GetTempPath(), "dvmm_" + Guid.NewGuid());
         try
         {
-            await Task.Run(() => ZipFile.ExtractToDirectory(archivePath, tempDir, overwriteFiles: true), ct);
+            await Task.Run(() => SafeExtractToDirectory(archivePath, tempDir), ct);
 
             // Determine the mod root: either the extracted folder itself or a single subdirectory
             var modRoot = FindModRoot(tempDir);
@@ -435,7 +435,7 @@ public class ModInstallService : IModInstallService
                 await Task.Run(() =>
                 {
                     TryDeleteDirectory(stagingDir);
-                    ZipFile.ExtractToDirectory(archivePath, stagingDir, overwriteFiles: true);
+                    SafeExtractToDirectory(archivePath, stagingDir);
                 }, ct);
             }
             catch (Exception ex)
@@ -567,7 +567,7 @@ public class ModInstallService : IModInstallService
                 await Task.Run(() =>
                 {
                     if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true);
-                    ZipFile.ExtractToDirectory(downloadPath, stagingDir, overwriteFiles: true);
+                    SafeExtractToDirectory(downloadPath, stagingDir);
                 }, ct);
             }
             catch (Exception ex)
@@ -705,6 +705,38 @@ public class ModInstallService : IModInstallService
             // Cross-volume: copy then delete
             CopyDirectoryRecursive(source, destination);
             Directory.Delete(source, true);
+        }
+    }
+
+    /// <summary>
+    /// Extracts a zip entry-by-entry, normalizing Windows-style <c>\</c> separators
+    /// in entry paths (which are not separators on Unix) and validating that every
+    /// destination stays inside <paramref name="destinationDir"/> (zip-slip) (H4).
+    /// </summary>
+    private static void SafeExtractToDirectory(string zipPath, string destinationDir)
+    {
+        Directory.CreateDirectory(destinationDir);
+        using var archive = ZipFile.OpenRead(zipPath);
+
+        foreach (var entry in archive.Entries)
+        {
+            // Normalize entry path: '\' → '/' then to the platform separator
+            var relative = entry.FullName.Replace('\\', '/');
+            while (relative.StartsWith('/')) relative = relative.TrimStart('/');
+
+            var destination = Path.GetFullPath(Path.Combine(destinationDir, relative));
+            if (!PathSafety.IsStrictlyUnder(destinationDir, destination) &&
+                !string.Equals(destination, Path.GetFullPath(destinationDir), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Zip entry '{entry.FullName}' escapes extraction directory.");
+
+            if (string.IsNullOrEmpty(entry.Name)) // directory entry
+            {
+                Directory.CreateDirectory(destination);
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            entry.ExtractToFile(destination, overwrite: true);
         }
     }
 
