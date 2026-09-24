@@ -837,10 +837,11 @@ public class ModInstallService : IModInstallService
         {
             using var archive = ZipFile.OpenRead(zipPath);
 
-            // Find Info.json at the root or one directory deep
+            // Find Info.json at the root or one directory deep.
+            // Count both '/' and '\' — Windows-made zips may use '\' separators (M8).
             var entry = archive.Entries.FirstOrDefault(e =>
                 string.Equals(e.Name, "Info.json", StringComparison.OrdinalIgnoreCase)
-                && e.FullName.Count(c => c == '/') <= 1);
+                && e.FullName.Count(c => c == '/' || c == '\\') <= 1);
 
             if (entry == null) return null;
 
