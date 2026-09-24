@@ -150,9 +150,18 @@ public class ModInstallService : IModInstallService
             var modInfo = JsonSerializer.Deserialize<ModInfo>(json, JsonOptions);
             if (modInfo == null) { Directory.Delete(tempDir, true); return null; }
 
+            // Reject malicious/invalid Ids before deriving any filesystem path (C1)
+            if (!PathSafety.IsValidModId(modInfo.Id))
+            {
+                Directory.Delete(tempDir, true);
+                _logger.LogError(
+                    "Rejected archive {Archive}: unsafe or empty mod Id '{Id}'", archivePath, modInfo.Id);
+                return null;
+            }
+
             var targetDir = activate
-                ? Path.Combine(gamePath, "Mods", modInfo.Id)
-                : Path.Combine(gamePath, "Mods.inactive", modInfo.Id);
+                ? PathSafety.SafeCombine(Path.Combine(gamePath, "Mods"), modInfo.Id)
+                : PathSafety.SafeCombine(Path.Combine(gamePath, "Mods.inactive"), modInfo.Id);
 
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
 
@@ -230,9 +239,17 @@ public class ModInstallService : IModInstallService
             var modInfo = JsonSerializer.Deserialize<ModInfo>(json, JsonOptions);
             if (modInfo == null) return null;
 
+            // Reject malicious/invalid Ids before deriving any filesystem path (C1)
+            if (!PathSafety.IsValidModId(modInfo.Id))
+            {
+                _logger.LogError(
+                    "Rejected folder {Folder}: unsafe or empty mod Id '{Id}'", modFolderPath, modInfo.Id);
+                return null;
+            }
+
             var targetDir = activate
-                ? Path.Combine(gamePath, "Mods",          modInfo.Id)
-                : Path.Combine(gamePath, "Mods.inactive", modInfo.Id);
+                ? PathSafety.SafeCombine(Path.Combine(gamePath, "Mods"),          modInfo.Id)
+                : PathSafety.SafeCombine(Path.Combine(gamePath, "Mods.inactive"), modInfo.Id);
 
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
 
