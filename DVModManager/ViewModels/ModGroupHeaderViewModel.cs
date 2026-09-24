@@ -5,13 +5,17 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DVModManager.ViewModels;
 
-public partial class ModGroupHeaderViewModel : ViewModelBase
+public partial class ModGroupHeaderViewModel : ViewModelBase, IDisposable
 {
     // Callbacks wired by MainWindowViewModel so the header can reach back without coupling
     private readonly Func<string, string, Task> _onRename;        // (groupId, newName)
     private readonly Func<string, Task> _onDelete;                 // (groupId)
     private readonly Func<string, bool, string, Task> _onToggle;  // (groupId, isCollapsed, panel)
     private readonly ILocalizationService? _localization;
+    // Kept as a field so we can unsubscribe in Dispose — a lambda would leak the
+    // whole VM via the singleton LanguageChanged event on every refresh (H9).
+    private EventHandler? _languageChangedHandler;
+    private bool _disposed;
 
     [ObservableProperty] private string _groupId = "";
     [ObservableProperty] private string _name = "";
@@ -47,9 +51,22 @@ public partial class ModGroupHeaderViewModel : ViewModelBase
         {
             _localization = App.Services.GetService(typeof(ILocalizationService)) as ILocalizationService;
             if (_localization != null)
-                _localization.LanguageChanged += (_, _) => OnPropertyChanged(nameof(ModCountLabel));
+            {
+                _languageChangedHandler = (_, _) => OnPropertyChanged(nameof(ModCountLabel));
+                _localization.LanguageChanged += _languageChangedHandler;
+            }
         }
         catch { }
+    }
+
+    /// <summary>Unsubscribes from the singleton localization event (see H9).</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_localization != null && _languageChangedHandler != null)
+            _localization.LanguageChanged -= _languageChangedHandler;
+        _languageChangedHandler = null;
     }
 
     /// <summary>Localized mod count label (e.g. "3 mod(s)").</summary>

@@ -262,6 +262,22 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         }
 
+        // Dispose stale headers/ghosts before dropping them (H9): both are
+        // recreated on every call and would otherwise accumulate event handlers
+        // on the singleton localization service.
+        foreach (var item in FilteredAvailableMods.Concat(FilteredActiveMods))
+        {
+            switch (item)
+            {
+                case ModGroupHeaderViewModel header:
+                    header.Dispose();
+                    break;
+                case ModItemViewModel ghost when ghost.IsMissing:
+                    ghost.Dispose();
+                    break;
+            }
+        }
+
         FilteredAvailableMods = newAvailable;
         FilteredActiveMods    = newActive;
     }
@@ -1443,8 +1459,10 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         // Remove from the UI lists
-        AvailableMods.Remove(SelectedMod);
-        ActiveMods.Remove(SelectedMod);
+        var removedVm = SelectedMod;
+        AvailableMods.Remove(removedVm);
+        ActiveMods.Remove(removedVm);
+        removedVm.Dispose();
 
         // Clean up any group references
         foreach (var g in _settings.Settings.ModGroups)
@@ -1494,6 +1512,11 @@ public partial class MainWindowViewModel : ViewModelBase
             foreach (var m in AvailableMods.Concat(ActiveMods))
                 if (m.ModInfo.PendingUpdate != null)
                     pendingUpdates.TryAdd(m.Id, m.ModInfo.PendingUpdate);
+
+            // Dispose VMs being replaced so their LanguageChanged subscriptions
+            // don't accumulate across refreshes (H9).
+            foreach (var vm in AvailableMods.Concat(ActiveMods))
+                vm.Dispose();
 
             AvailableMods.Clear();
             ActiveMods.Clear();
