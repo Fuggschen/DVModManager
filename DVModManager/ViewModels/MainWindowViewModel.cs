@@ -1665,8 +1665,13 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_settings.Settings.GamePath == null) return [];
 
-        var activeMap = ActiveMods.ToDictionary(m => m.Id, m => m.Version, StringComparer.OrdinalIgnoreCase);
-        // Use last-write-wins to handle any duplicates (e.g. mods with empty Id)
+        // Use last-write-wins to handle any duplicates (e.g. mods with empty Id) (H3):
+        // ToDictionary throws on duplicate/empty keys, so build via indexer instead.
+        var activeMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in ActiveMods)
+            if (!string.IsNullOrEmpty(m.Id))
+                activeMap[m.Id] = m.Version;
+
         var inactiveMap = new Dictionary<string, ModItemViewModel>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in AvailableMods)
             if (!string.IsNullOrEmpty(m.Id))
