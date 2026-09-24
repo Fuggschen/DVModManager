@@ -576,15 +576,18 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (SelectedMod == null) return;
 
-        SetBusy(_localization.GetString("status.deactivating_mod", SelectedMod.DisplayName));
-        var success2 = await _modInstall.DeactivateModAsync(SelectedMod.ModInfo, _settings.Settings.GamePath);
+        // Snapshot before the first await — a refresh during the await can clear SelectedMod (M5)
+        var selectedVm = SelectedMod;
+        var dn = selectedVm.DisplayName;
+
+        SetBusy(_localization.GetString("status.deactivating_mod", dn));
+        var success2 = await _modInstall.DeactivateModAsync(selectedVm.ModInfo, _settings.Settings.GamePath);
         ClearBusy();
 
-        var dn = SelectedMod.DisplayName;
         if (success2)
         {
-            SelectedMod.SyncFromModel();
-            MoveToInactive(SelectedMod);
+            selectedVm.SyncFromModel();
+            MoveToInactive(selectedVm);
             StatusMessage = _localization.GetString("status.deactivated", dn);
         }
         else
@@ -999,7 +1002,10 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (SelectedMod == null || _settings.Settings.GamePath == null) return;
 
-        var displayName = SelectedMod.DisplayName;
+        // Snapshot before the first await — a refresh during the await can clear SelectedMod (M5)
+        var selectedVm = SelectedMod;
+        var displayName = selectedVm.DisplayName;
+        var modId = selectedVm.Id;
         var confirmed = await _dialogService.ConfirmAsync(
             _localization.GetString("dialog.uninstall_title"),
             _localization.GetString("dialog.uninstall_message", displayName));
@@ -1008,13 +1014,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
         SetBusy(_localization.GetString("busy.uninstalling_mod", displayName));
         var success = await _modInstall.UninstallModAsync(
-            SelectedMod.ModInfo, _settings.Settings.GamePath, _settings.Settings.StoragePath, hardDelete: false);
+            selectedVm.ModInfo, _settings.Settings.GamePath, _settings.Settings.StoragePath, hardDelete: false);
         ClearBusy();
 
         if (success)
         {
             // Remove from groups before refresh to prevent ghost entries
-            var modId = SelectedMod.Id;
             foreach (var g in _settings.Settings.ModGroups)
                 g.ModIds.Remove(modId);
             await _settings.SaveAsync();
@@ -1062,8 +1067,10 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (SelectedMod?.ModInfo.PendingUpdate == null || _settings.Settings.GamePath == null) return;
 
-        var displayName = SelectedMod.DisplayName;
-        var update = SelectedMod.ModInfo.PendingUpdate;
+        // Snapshot before the first await — a refresh during the await can clear SelectedMod (M5)
+        var selectedVm = SelectedMod;
+        var displayName = selectedVm.DisplayName;
+        var update = selectedVm.ModInfo.PendingUpdate!;
 
         // Nexus mods (and GitHub releases without a direct asset URL) require manual download
         bool canAutoDownload = update.Source == "github" && !string.IsNullOrEmpty(update.DownloadUrl);
@@ -1080,13 +1087,13 @@ public partial class MainWindowViewModel : ViewModelBase
         var progress = new Progress<double>(p =>
             BusyMessage = _localization.GetString("busy.update_progress", displayName, p));
         var success = await _modInstall.UpdateModAsync(
-            SelectedMod.ModInfo, update, _settings.Settings.GamePath, _settings.Settings.StoragePath, progress);
+            selectedVm.ModInfo, update, _settings.Settings.GamePath, _settings.Settings.StoragePath, progress);
         ClearBusy();
 
         if (success)
         {
             // Clear the pending update before refresh so the badge doesn't persist
-            SelectedMod.ModInfo.PendingUpdate = null;
+            selectedVm.ModInfo.PendingUpdate = null;
             await RefreshModsAsync();
             StatusMessage = _localization.GetString("status.updated", displayName, update.LatestVersion);
         }
@@ -1506,19 +1513,20 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (SelectedMod == null) return;
 
-        var displayName = SelectedMod.DisplayName;
+        // Snapshot before the first await — a refresh during the await can clear SelectedMod (M5)
+        var selectedVm = SelectedMod;
+        var displayName = selectedVm.DisplayName;
+        var modId = selectedVm.Id;
         var confirmed = await _dialogService.ConfirmAsync(
             _localization.GetString("dialog.remove_title"),
             _localization.GetString("dialog.remove_message", displayName));
 
         if (!confirmed) return;
 
-        var modId = SelectedMod.Id;
-
         // Try to delete the folder from disk if it still exists
         if (_settings.Settings.GamePath != null)
         {
-            var folderPath = SelectedMod.ModInfo.FolderPath;
+            var folderPath = selectedVm.ModInfo.FolderPath;
             if (!string.IsNullOrEmpty(folderPath) && Directory.Exists(folderPath))
             {
                 try { Directory.Delete(folderPath, true); }
@@ -1527,10 +1535,9 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         // Remove from the UI lists
-        var removedVm = SelectedMod;
-        AvailableMods.Remove(removedVm);
-        ActiveMods.Remove(removedVm);
-        removedVm.Dispose();
+        AvailableMods.Remove(selectedVm);
+        ActiveMods.Remove(selectedVm);
+        selectedVm.Dispose();
 
         // Clean up any group references
         foreach (var g in _settings.Settings.ModGroups)
