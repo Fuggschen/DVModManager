@@ -14,7 +14,28 @@ public static class PlatformHelper
         {
             if (OperatingSystem.IsWindows())
             {
-                Process.Start(new ProcessStartInfo(pathOrUrl) { UseShellExecute = true });
+                // Only protocol handlers are shell-executed (http/https/steam).
+                // Filesystem paths are opened via explorer.exe so a malicious
+                // path (e.g. a .exe/.bat dropped into a mod folder) is never
+                // executed by ShellExecute (H6).
+                if (Uri.TryCreate(pathOrUrl, UriKind.Absolute, out var uri)
+                    && (uri.Scheme == Uri.UriSchemeHttp
+                        || uri.Scheme == Uri.UriSchemeHttps
+                        || uri.Scheme == "steam"))
+                {
+                    Process.Start(new ProcessStartInfo(pathOrUrl) { UseShellExecute = true });
+                }
+                else
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        UseShellExecute = false
+                    };
+                    psi.ArgumentList.Add(
+                        Directory.Exists(pathOrUrl) ? pathOrUrl : $"/select,{pathOrUrl}");
+                    Process.Start(psi);
+                }
             }
             else if (OperatingSystem.IsLinux())
             {
