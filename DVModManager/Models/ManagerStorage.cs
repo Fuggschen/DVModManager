@@ -57,7 +57,25 @@ public static class ManagerStorage
 
     public static string SettingsFilePath => Path.Combine(ConfigDirectory, SettingsFileName);
 
+    /// <summary>
+    /// Characters invalid in profile file names on either Windows or Unix (M4).
+    /// A fixed set (not <see cref="Path.GetInvalidFileNameChars"/>) so a profile
+    /// saved on one OS maps to the same file name on the other.
+    /// </summary>
+    private static readonly char[] AlwaysInvalidFileNameChars =
+        { ':', '*', '?', '"', '<', '>', '|', '/', '\\' };
+
     /// <summary>The file a profile of this name is saved to, within a profiles directory.</summary>
-    public static string ProfileFileName(string profileName) =>
-        string.Concat(profileName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) + ".json";
+    public static string ProfileFileName(string profileName)
+    {
+        var builder = new System.Text.StringBuilder(profileName.Length);
+        foreach (var c in profileName)
+        {
+            if (c < 32 || Array.IndexOf(AlwaysInvalidFileNameChars, c) >= 0)
+                builder.Append('_');
+            else
+                builder.Append(c);
+        }
+        return builder.ToString() + ".json";
+    }
 }
