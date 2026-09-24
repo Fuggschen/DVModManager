@@ -370,11 +370,26 @@ public class ModInstallService : IModInstallService
                 return false;
             }
 
-            // Determine current folder (active or inactive)
-            var activePath = Path.Combine(gamePath, "Mods", modId);
-            var inactivePath = Path.Combine(gamePath, "Mods.inactive", modId);
-            var currentPath = Directory.Exists(activePath) ? activePath : inactivePath;
-            var isActive = currentPath == activePath;
+            // Resolve the real mod folder via discovery — the folder name may
+            // differ from modId, and the mod may live in Mods/ or Mods.inactive/ (H1)
+            var activeRoot   = Path.Combine(gamePath, "Mods");
+            var inactiveRoot = Path.Combine(gamePath, "Mods.inactive");
+
+            var currentPath = await Task.Run(() =>
+                FindModFolderByModId(activeRoot, modId) ??
+                FindModFolderByModId(inactiveRoot, modId), ct);
+
+            if (currentPath == null)
+            {
+                // Not installed under any folder name: fall back to the convention path
+                currentPath = PathSafety.SafeCombine(
+                    inactiveRoot, PathSafety.IsValidModId(modId) ? modId : null);
+            }
+
+            // Explicitly preserve whether the mod currently lives in Mods/ or Mods.inactive/
+            var isActive = PathSafety.IsStrictlyUnder(activeRoot, currentPath);
+            _logger.LogDebug("Rollback target for {Id} is {Path} (active: {Active})",
+                modId, currentPath, isActive);
 
             // Archive current before overwriting
             if (Directory.Exists(currentPath))
@@ -650,6 +665,44 @@ public class ModInstallService : IModInstallService
         }
         catch (IOException) { /* best-effort cleanup */ }
         catch (UnauthorizedAccessException) { /* best-effort cleanup */ }
+    }
+
+    /// <summary>
+    /// Finds a mod's folder under <paramref name="root"/> by folder name (fast path)
+    /// or by the <c>Id</c> field of its Info.json. Comparison is case-insensitive.
+    /// </summary>
+    private string? FindModFolderByModId(string root, string modId)
+    {
+        if (!Directory.Exists(root)) return null;
+
+        var dirs = Directory.GetDirectories(root);
+
+        // Fast path: folder name matches the mod id
+        foreach (var dir in dirs)
+        {
+            if (string.Equals(Path.GetFileName(dir), modId, StringComparison.OrdinalIgnoreCase))
+                return dir;
+        }
+
+        // Slow path: match the Id declared in Info.json
+        foreach (var dir in dirs)
+        {
+            var infoPath = InfoJsonLocator.Locate(dir);
+            if (infoPath == null) continue;
+            try
+            {
+                var doc = JsonSerializer.Deserialize<JsonElement>(
+                    File.ReadAllText(infoPath), JsonOptions);
+                if ((doc.TryGetProperty("Id", out var idElem) || doc.TryGetProperty("id", out idElem))
+                    && string.Equals(idElem.GetString(), modId, StringComparison.OrdinalIgnoreCase))
+                    return dir;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not read {Path} while resolving mod {Id}", infoPath, modId);
+            }
+        }
+        return null;
     }
 
     private static string? FindModRoot(string extractedDir)
