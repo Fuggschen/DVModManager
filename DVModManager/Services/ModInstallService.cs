@@ -290,6 +290,17 @@ public class ModInstallService : IModInstallService
 
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
 
+            // Stage next to the target and swap — the existing install is only
+            // replaced after the copy fully succeeds (H12/L3).
+            var stagingDir = targetDir + ".staging";
+            var backupDir  = targetDir + ".backup";
+
+            await Task.Run(() =>
+            {
+                TryDeleteDirectory(stagingDir);
+                CopyDirectoryRecursive(modFolderPath, stagingDir);
+            }, ct);
+
             if (Directory.Exists(targetDir))
             {
                 var existingInfoPath = InfoJsonLocator.Locate(targetDir);
@@ -306,12 +317,35 @@ public class ModInstallService : IModInstallService
                                 await _versionCache.ArchiveCurrentVersionAsync(existingMod, storagePath);
                         }
                     }
-                    catch { /* archive failure is non-fatal */ }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Archiving previous version of {Id} failed (non-fatal)", modInfo.Id);
+                    }
                 }
-                Directory.Delete(targetDir, true);
             }
 
-            await Task.Run(() => CopyDirectoryRecursive(modFolderPath, targetDir), ct);
+            // Swap: target → backup, staging → target; restore backup if the move fails.
+            await Task.Run(() =>
+            {
+                if (Directory.Exists(targetDir))
+                {
+                    TryDeleteDirectory(backupDir);
+                    MoveDirectory(targetDir, backupDir);
+                }
+
+                try
+                {
+                    MoveDirectory(stagingDir, targetDir);
+                }
+                catch
+                {
+                    if (Directory.Exists(backupDir) && !Directory.Exists(targetDir))
+                        MoveDirectory(backupDir, targetDir);
+                    throw;
+                }
+
+                TryDeleteDirectory(backupDir);
+            }, ct);
 
             modInfo.FolderPath = targetDir;
             modInfo.IsActive   = activate;
@@ -391,6 +425,26 @@ public class ModInstallService : IModInstallService
             _logger.LogDebug("Rollback target for {Id} is {Path} (active: {Active})",
                 modId, currentPath, isActive);
 
+            // Extract to staging first so a failed extract never destroys the
+            // current install (H12/L3).
+            var stagingDir = currentPath + ".staging";
+            var backupDir  = currentPath + ".backup";
+
+            try
+            {
+                await Task.Run(() =>
+                {
+                    TryDeleteDirectory(stagingDir);
+                    ZipFile.ExtractToDirectory(archivePath, stagingDir, overwriteFiles: true);
+                }, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Rollback aborted for {Id}: extraction of {Zip} failed", modId, archivePath);
+                TryDeleteDirectory(stagingDir);
+                return false;
+            }
+
             // Archive current before overwriting
             if (Directory.Exists(currentPath))
             {
@@ -407,10 +461,33 @@ public class ModInstallService : IModInstallService
                             await _versionCache.ArchiveCurrentVersionAsync(currentMod, storagePath);
                     }
                 }
-                Directory.Delete(currentPath, true);
             }
 
-            await Task.Run(() => ZipFile.ExtractToDirectory(archivePath, currentPath, overwriteFiles: true), ct);
+            // Swap: current → backup, staging → current; restore backup on failure.
+            await Task.Run(() =>
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(currentPath)!);
+
+                if (Directory.Exists(currentPath))
+                {
+                    TryDeleteDirectory(backupDir);
+                    MoveDirectory(currentPath, backupDir);
+                }
+
+                try
+                {
+                    MoveDirectory(stagingDir, currentPath);
+                }
+                catch
+                {
+                    if (Directory.Exists(backupDir) && !Directory.Exists(currentPath))
+                        MoveDirectory(backupDir, currentPath);
+                    throw;
+                }
+
+                TryDeleteDirectory(backupDir);
+            }, ct);
+
             _logger.LogInformation("Rolled back {Id} to v{Version}", modId, version);
             return true;
         }
