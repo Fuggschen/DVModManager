@@ -147,9 +147,14 @@ public sealed class ModDiscoveryService : IModDiscoveryService
     {
         // Debounce: cancel any pending fire, schedule a new one after 500ms.
         // This ensures rapid changes (e.g., unzipping) only fire once.
-        _debounceCts?.Cancel();
-        _debounceCts = new CancellationTokenSource();
-        var token = _debounceCts.Token;
+        // Interlocked.Exchange swaps the CTS atomically and lets us dispose the
+        // previous one so cancelled timers don't leak registrations (M1).
+        var next = new CancellationTokenSource();
+        var prev = Interlocked.Exchange(ref _debounceCts, next);
+        prev?.Cancel();
+        prev?.Dispose();
+
+        var token = next.Token;
         _ = Task.Delay(500, token).ContinueWith(t =>
         {
             if (!t.IsCanceled)
@@ -165,5 +170,11 @@ public sealed class ModDiscoveryService : IModDiscoveryService
         _inactiveWatcher = null;
     }
 
-    public void Dispose() => StopWatching();
+    public void Dispose()
+    {
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+        _debounceCts = null;
+        StopWatching();
+    }
 }
