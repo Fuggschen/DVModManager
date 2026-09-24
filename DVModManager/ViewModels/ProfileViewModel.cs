@@ -113,6 +113,10 @@ public partial class ProfileViewModel : ViewModelBase
         try
         {
             var profile = await _profileService.ImportProfileAsync(path);
+            // Uniquify the name so an existing profile of the same name is never
+            // silently overwritten (H7).
+            var uniqueName = await _profileService.GetUniqueProfileNameAsync(profile.Name, _profilesPath);
+            profile.Name = uniqueName;
             await _profileService.SaveProfileAsync(profile, _profilesPath);
             await LoadProfilesAsync(_profilesPath);
         }
