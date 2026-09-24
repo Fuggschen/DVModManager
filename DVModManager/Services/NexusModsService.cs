@@ -17,6 +17,9 @@ public class NexusModsService : INexusModsService
     public NexusModsService(IHttpClientFactory httpClientFactory, ILogger<NexusModsService> logger)
     {
         _http = httpClientFactory.CreateClient("nexus");
+        // Set the UA once here — appending it per request would grow the shared
+        // header list without bound (M2).
+        _http.DefaultRequestHeaders.UserAgent.TryParseAdd("DVModManager/1.0");
         _logger = logger;
     }
 
@@ -38,7 +41,6 @@ public class NexusModsService : INexusModsService
                 variables = new { gameId = GameId, modId = nexusId.ToString() }
             };
 
-            ConfigureHeaders();
             var response = await _http.PostAsJsonAsync(GraphQLUrl, payload, ct);
 
             if (!response.IsSuccessStatusCode)
@@ -95,7 +97,6 @@ public class NexusModsService : INexusModsService
         string downloadUrl, string destinationPath,
         IProgress<double>? progress = null, CancellationToken ct = default)
     {
-        ConfigureHeaders();
         using var response = await _http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
 
@@ -119,11 +120,6 @@ public class NexusModsService : INexusModsService
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private void ConfigureHeaders()
-    {
-        _http.DefaultRequestHeaders.UserAgent.TryParseAdd("DVModManager/1.0");
-    }
 
     private static int? ExtractNexusModId(string? homePage)
     {
