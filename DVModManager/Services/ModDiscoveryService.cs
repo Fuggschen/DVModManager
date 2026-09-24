@@ -29,6 +29,7 @@ public sealed class ModDiscoveryService : IModDiscoveryService
         {
             foreach (var dir in Directory.GetDirectories(activeDir))
             {
+                if (IsInternalDir(dir)) continue;
                 var mod = await ParseModInfoAsync(dir, isActive: true);
                 if (mod != null) mods.Add(mod);
             }
@@ -38,12 +39,27 @@ public sealed class ModDiscoveryService : IModDiscoveryService
         {
             foreach (var dir in Directory.GetDirectories(inactiveDir))
             {
+                if (IsInternalDir(dir)) continue;
                 var mod = await ParseModInfoAsync(dir, isActive: false);
                 if (mod != null) mods.Add(mod);
             }
         }
 
         return mods;
+    }
+
+    /// <summary>
+    /// Skips internal working directories used by the installer
+    /// (<c>*.staging</c>, <c>*.backup</c>, <c>*.update_*</c>) so leftover
+    /// intermediate folders are never surfaced as mods.
+    /// </summary>
+    private static bool IsInternalDir(string dir)
+    {
+        var name = Path.GetFileName(dir);
+        return name.EndsWith(".staging", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".backup", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".update_staging", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".update_backup", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<ModInfo?> ParseModInfoAsync(string folderPath, bool isActive)
