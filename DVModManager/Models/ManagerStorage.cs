@@ -23,8 +23,37 @@ public static class ManagerStorage
     /// <see cref="PublicSettings.StoragePath"/>, which is why anything looking for the
     /// manager's data has to start here and follow that path afterwards.
     /// </summary>
-    public static string ConfigDirectory =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), DirectoryName);
+    /// <remarks>
+    /// Single source of truth for the manager's app-data directory (settings, logs).
+    /// On Linux this respects <c>XDG_CONFIG_HOME</c> when it is a valid absolute path,
+    /// otherwise falling back to <c>~/.config</c>. Everything that needs this location
+    /// must resolve it through here so the paths can never diverge (H8).
+    /// </remarks>
+    public static string ConfigDirectory
+    {
+        get
+        {
+            if (IsLinuxLike)
+            {
+                var xdg = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+                var configBase = !string.IsNullOrEmpty(xdg) && Path.IsPathRooted(xdg)
+                    ? xdg
+                    : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+                return Path.Combine(configBase, DirectoryName);
+            }
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), DirectoryName);
+        }
+    }
+
+    /// <summary>True on Linux (incl. Mono's platform ids); false on Windows and macOS.</summary>
+    private static bool IsLinuxLike
+    {
+        get
+        {
+            var platform = (int)Environment.OSVersion.Platform;
+            return platform == 4 || platform == 128; // PlatformID.Unix / Mono Unix
+        }
+    }
 
     public static string SettingsFilePath => Path.Combine(ConfigDirectory, SettingsFileName);
 
