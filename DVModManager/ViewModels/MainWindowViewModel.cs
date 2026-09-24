@@ -24,6 +24,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly IUpdateService _updateService;
     private readonly IDialogService _dialogService;
     private readonly ILocalizationService _localization;
+    private readonly IHttpClientFactory _httpFactory;
     private readonly Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> _logger;
 
     // ── Observable state ──────────────────────────────────────────────────────
@@ -124,9 +125,11 @@ public partial class MainWindowViewModel : ViewModelBase
         IUpdateService updateService,
         IDialogService dialogService,
         ILocalizationService localization,
+        IHttpClientFactory httpFactory,
         Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> logger)
     {
         _logger = logger;
+        _httpFactory = httpFactory;
         _settings = settings;
         _gameDetection = gameDetection;
         _modDiscovery = modDiscovery;
@@ -1922,9 +1925,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(15);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/" + AppVersion);
+            var http = _httpFactory.CreateClient("github");
             string json;
             json = await http.GetStringAsync(ManagerUpdateRepository);
 

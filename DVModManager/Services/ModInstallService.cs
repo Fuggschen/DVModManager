@@ -10,6 +10,7 @@ public class ModInstallService : IModInstallService
 {
     private readonly IVersionCacheService _versionCache;
     private readonly ISettingsService _settings;
+    private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<ModInstallService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -18,10 +19,12 @@ public class ModInstallService : IModInstallService
         AllowTrailingCommas = true
     };
 
-    public ModInstallService(IVersionCacheService versionCache, ISettingsService settings, ILogger<ModInstallService> logger)
+    public ModInstallService(IVersionCacheService versionCache, ISettingsService settings,
+        IHttpClientFactory httpFactory, ILogger<ModInstallService> logger)
     {
         _versionCache = versionCache;
         _settings = settings;
+        _httpFactory = httpFactory;
         _logger = logger;
     }
 
@@ -517,8 +520,7 @@ public class ModInstallService : IModInstallService
             Directory.CreateDirectory(downloadDir);
             var downloadPath = Path.Combine(downloadDir, $"{update.LatestVersion}.zip");
 
-            using var http = new HttpClient();
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
+            var http = _httpFactory.CreateClient("github");
             using var response = await http.GetAsync(
                 update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();
@@ -652,9 +654,7 @@ public class ModInstallService : IModInstallService
             Directory.CreateDirectory(downloadDir);
             var downloadPath = Path.Combine(downloadDir, $"{Guid.NewGuid()}.zip");
 
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(60);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
+            var http = _httpFactory.CreateClient("github");
             using var response = await http.GetAsync(
                 downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();

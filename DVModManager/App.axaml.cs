@@ -95,8 +95,17 @@ public class App : Application
             b.SetMinimumLevel(LogLevel.Debug);
         });
 
-        // HTTP
-        services.AddHttpClient();
+        // HTTP — named clients so every consumer pools connections (M7) and the
+        // User-Agent is set exactly once instead of per request.
+        services.AddHttpClient("github", c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(60);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
+        });
+        services.AddHttpClient("nexus", c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(60);
+        });
 
         // Localization (must be registered early, before UI/ViewModels)
         services.AddSingleton<ILocalizationService, LocalizationService>();
