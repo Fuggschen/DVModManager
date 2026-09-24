@@ -101,7 +101,18 @@ public class ModInstallService : IModInstallService
             await Task.Run(() =>
             {
                 Directory.CreateDirectory(Path.Combine(gamePath, "Mods.inactive"));
-                if (Directory.Exists(inactivePath)) Directory.Delete(inactivePath, true);
+
+                // Never silently destroy a leftover/other mod at the target (C3):
+                // preserve it under a conflict name instead of deleting it.
+                if (Directory.Exists(inactivePath))
+                {
+                    var conflictPath = GetConflictPath(inactivePath);
+                    _logger.LogWarning(
+                        "Inactive folder already exists at {Path}; moving it to {Conflict} instead of deleting",
+                        inactivePath, conflictPath);
+                    MoveDirectory(inactivePath, conflictPath);
+                }
+
                 MoveDirectory(activePath, inactivePath);
             }, ct);
 
@@ -586,6 +597,22 @@ public class ModInstallService : IModInstallService
             File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
         foreach (var dir in Directory.GetDirectories(source))
             CopyDirectoryRecursive(dir, Path.Combine(destination, Path.GetFileName(dir)));
+    }
+
+    /// <summary>
+    /// Returns a non-existing sibling path that preserves a conflicting directory
+    /// instead of deleting it (e.g. <c>MyMod.conflict-20260924-075500</c>).
+    /// </summary>
+    private static string GetConflictPath(string path)
+    {
+        var parent = Path.GetDirectoryName(path)!;
+        var name   = Path.GetFileName(path);
+        var stamp  = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var candidate = Path.Combine(parent, $"{name}.conflict-{stamp}");
+        var n = 1;
+        while (Directory.Exists(candidate))
+            candidate = Path.Combine(parent, $"{name}.conflict-{stamp}-{n++}");
+        return candidate;
     }
 
     /// <summary>Best-effort recursive directory delete that never throws.</summary>
