@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace DVModManager.Helpers;
 
@@ -10,6 +12,12 @@ public static class PlatformHelper
     /// </summary>
     public static void Open(string pathOrUrl)
     {
+
+        if (string.IsNullOrWhiteSpace(pathOrUrl))
+        {
+            return;
+        }
+
         try
         {
             if (OperatingSystem.IsWindows())
@@ -27,18 +35,21 @@ public static class PlatformHelper
                 }
                 else
                 {
+                    var isDirectory = Directory.Exists(pathOrUrl);
+                    var arg = isDirectory ? pathOrUrl : $"/select,{pathOrUrl}";
+
                     var psi = new ProcessStartInfo
                     {
                         FileName = "explorer.exe",
                         UseShellExecute = false
                     };
-                    psi.ArgumentList.Add(
-                        Directory.Exists(pathOrUrl) ? pathOrUrl : $"/select,{pathOrUrl}");
-                    Process.Start(psi);
+                    psi.ArgumentList.Add(arg);
+                    var proc = Process.Start(psi);
                 }
             }
             else if (OperatingSystem.IsLinux())
             {
+
                 // ArgumentList keeps paths with spaces/metacharacters as one argument (H5)
                 var psi = new ProcessStartInfo
                 {
@@ -46,12 +57,21 @@ public static class PlatformHelper
                     UseShellExecute = false
                 };
                 psi.ArgumentList.Add(pathOrUrl);
-                Process.Start(psi);
+
+                var proc = Process.Start(psi);
+                if (proc is null)
+                {
+                    return;
+                }
+            }
+            else
+            {
+                return;
             }
         }
         catch
         {
-            // Ignore – best-effort shell interaction
+            return;
         }
     }
 }
