@@ -57,7 +57,9 @@ public class InfoJsonLocatorTests
         {
             string? found = InfoJsonLocator.Locate(tempDir);
             Assert.NotNull(found);
-            Assert.Equal(infoJson, found);
+            // On case-insensitive filesystems (Windows) the exact-case "Info.json" probe
+            // matches first, so the returned casing can differ from what was written.
+            Assert.Equal(infoJson, found, ignoreCase: true);
         }
         finally
         {
