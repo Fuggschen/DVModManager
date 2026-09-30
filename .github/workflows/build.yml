@@ -16,14 +16,32 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 8.0.x
+          # 10.0 SDK builds (and reads .slnx); 8.0 provides the runtime the net8.0 tests run on.
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Build
-        run: dotnet build DVModManager/DVModManager.csproj -c Release
+        run: dotnet build DVModManager.slnx -c Release
+
+      - name: Test
+        run: dotnet test DVModManager.slnx -c Release --no-build --logger trx --results-directory TestResults
+
+      # Consumed by test-report.yml, which has the write token fork PRs lack.
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.os }}
+          path: TestResults
