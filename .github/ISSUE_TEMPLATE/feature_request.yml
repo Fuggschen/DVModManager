@@ -38,7 +38,7 @@ body:
     attributes:
       label: User Impact
       description: Who benefits and how?
-      placeholder: Example: Helps users manage large mod sets faster.
+      placeholder: "Example: Helps users manage large mod sets faster."
 
   - type: textarea
     id: acceptance
