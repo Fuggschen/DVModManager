@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace DVModManager.Helpers;
 
@@ -10,20 +12,66 @@ public static class PlatformHelper
     /// </summary>
     public static void Open(string pathOrUrl)
     {
+
+        if (string.IsNullOrWhiteSpace(pathOrUrl))
+        {
+            return;
+        }
+
         try
         {
             if (OperatingSystem.IsWindows())
             {
-                Process.Start(new ProcessStartInfo(pathOrUrl) { UseShellExecute = true });
+                // Only protocol handlers are shell-executed (http/https/steam).
+                // Filesystem paths are opened via explorer.exe so a malicious
+                // path (e.g. a .exe/.bat dropped into a mod folder) is never
+                // executed by ShellExecute (H6).
+                if (Uri.TryCreate(pathOrUrl, UriKind.Absolute, out var uri)
+                    && (uri.Scheme == Uri.UriSchemeHttp
+                        || uri.Scheme == Uri.UriSchemeHttps
+                        || uri.Scheme == "steam"))
+                {
+                    Process.Start(new ProcessStartInfo(pathOrUrl) { UseShellExecute = true });
+                }
+                else
+                {
+                    var isDirectory = Directory.Exists(pathOrUrl);
+                    var arg = isDirectory ? pathOrUrl : $"/select,{pathOrUrl}";
+
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        UseShellExecute = false
+                    };
+                    psi.ArgumentList.Add(arg);
+                    var proc = Process.Start(psi);
+                }
             }
             else if (OperatingSystem.IsLinux())
             {
-                Process.Start("xdg-open", pathOrUrl);
+
+                // ArgumentList keeps paths with spaces/metacharacters as one argument (H5)
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "xdg-open",
+                    UseShellExecute = false
+                };
+                psi.ArgumentList.Add(pathOrUrl);
+
+                var proc = Process.Start(psi);
+                if (proc is null)
+                {
+                    return;
+                }
+            }
+            else
+            {
+                return;
             }
         }
         catch
         {
-            // Ignore – best-effort shell interaction
+            return;
         }
     }
 }

@@ -8,10 +8,14 @@ namespace DVModManager.ViewModels;
 
 public record DependencyDisplayItem(string Requirement, bool IsMissing);
 
-public partial class ModItemViewModel : ViewModelBase
+public partial class ModItemViewModel : ViewModelBase, IDisposable
 {
     private readonly ModInfo _modInfo;
     private readonly ILocalizationService? _localization;
+    // Kept as a field so we can unsubscribe in Dispose — a lambda would leak the
+    // whole VM via the singleton LanguageChanged event on every refresh (H9).
+    private EventHandler? _languageChangedHandler;
+    private bool _disposed;
 
     /// <summary>Normal constructor from a scanned ModInfo.</summary>
     public ModItemViewModel(ModInfo modInfo)
@@ -22,7 +26,10 @@ public partial class ModItemViewModel : ViewModelBase
         {
             _localization = App.Services.GetService(typeof(ILocalizationService)) as ILocalizationService;
             if (_localization != null)
-                _localization.LanguageChanged += (_, _) => OnPropertyChanged(nameof(StatusLabel));
+            {
+                _languageChangedHandler = (_, _) => OnPropertyChanged(nameof(StatusLabel));
+                _localization.LanguageChanged += _languageChangedHandler;
+            }
         }
         catch
         {
@@ -30,6 +37,16 @@ public partial class ModItemViewModel : ViewModelBase
         }
 
         SyncFromModel();
+    }
+
+    /// <summary>Unsubscribes from the singleton localization event (see H9).</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_localization != null && _languageChangedHandler != null)
+            _localization.LanguageChanged -= _languageChangedHandler;
+        _languageChangedHandler = null;
     }
 
     /// <summary>Ghost constructor for a mod that is in a group but missing from disk.</summary>

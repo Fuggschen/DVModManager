@@ -34,9 +34,8 @@ public class App : Application
         // Language will be applied after settings load in MainWindowViewModel.InitializeAsync()
 
         // Catch unhandled exceptions on any thread and surface them in the status bar / console
-        var logDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "DVModManager", "logs");
+        // Use the shared resolver so logs land with settings, incl. XDG_CONFIG_HOME on Linux (H8)
+        var logDir = Path.Combine(ManagerStorage.ConfigDirectory, "logs");
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
             var ex = e.ExceptionObject as Exception;
@@ -85,26 +84,10 @@ public class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private static string GetAppDataDirectory()
-    {
-        if (OperatingSystem.IsLinux())
-        {
-            // Respect XDG_CONFIG_HOME if set to a valid absolute path, otherwise fall back to ~/.config
-            var xdg = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-            var configBase = !string.IsNullOrEmpty(xdg) && Path.IsPathRooted(xdg)
-                ? xdg
-                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
-            return Path.Combine(configBase, ManagerStorage.DirectoryName);
-        }
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            ManagerStorage.DirectoryName);
-    }
-
     private static void ConfigureServices(IServiceCollection services)
     {
         // Logging
-        var logDir = Path.Combine(GetAppDataDirectory(), "logs");
+        var logDir = Path.Combine(ManagerStorage.ConfigDirectory, "logs");
         services.AddLogging(b =>
         {
             b.AddConsole();
@@ -112,8 +95,17 @@ public class App : Application
             b.SetMinimumLevel(LogLevel.Debug);
         });
 
-        // HTTP
-        services.AddHttpClient();
+        // HTTP — named clients so every consumer pools connections (M7) and the
+        // User-Agent is set exactly once instead of per request.
+        services.AddHttpClient("github", c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(60);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
+        });
+        services.AddHttpClient("nexus", c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(60);
+        });
 
         // Localization (must be registered early, before UI/ViewModels)
         services.AddSingleton<ILocalizationService, LocalizationService>();

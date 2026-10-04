@@ -461,22 +461,15 @@ public partial class ModListView : UserControl
         e.Handled = true;
     }
 
-    private static async Task ActivateDroppedModsAsync(MainWindowViewModel vm, List<ModItemViewModel> mods)
+    private static Task ActivateDroppedModsAsync(MainWindowViewModel vm, List<ModItemViewModel> mods)
     {
-        foreach (var mod in mods)
-        {
-            // Temporarily set selected mod so the command uses it
-            vm.SelectedMod = mod;
-            await vm.ActivateSelectedModCommand.ExecuteAsync(null);
-        }
+        // Dedicated batch method — ActivateSelectedModCommand would re-run the
+        // whole checked set on every invocation (H11).
+        return vm.ActivateModsAsync(mods);
     }
 
-    private static async Task DeactivateDroppedModsAsync(MainWindowViewModel vm, List<ModItemViewModel> mods)
+    private static Task DeactivateDroppedModsAsync(MainWindowViewModel vm, List<ModItemViewModel> mods)
     {
-        foreach (var mod in mods)
-        {
-            vm.SelectedMod = mod;
-            await vm.DeactivateSelectedModCommand.ExecuteAsync(null);
-        }
+        return vm.DeactivateModsAsync(mods);
     }
 }

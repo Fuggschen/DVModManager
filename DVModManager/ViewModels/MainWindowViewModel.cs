@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using DVModManager.Models;
 using DVModManager.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace DVModManager.ViewModels;
 
@@ -23,6 +24,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly IUpdateService _updateService;
     private readonly IDialogService _dialogService;
     private readonly ILocalizationService _localization;
+    private readonly IHttpClientFactory _httpFactory;
+    private readonly Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> _logger;
 
     // ── Observable state ──────────────────────────────────────────────────────
     [ObservableProperty] private ObservableCollection<ModItemViewModel> _availableMods = [];
@@ -121,8 +124,12 @@ public partial class MainWindowViewModel : ViewModelBase
         IProfileService profileService,
         IUpdateService updateService,
         IDialogService dialogService,
-        ILocalizationService localization)
+        ILocalizationService localization,
+        IHttpClientFactory httpFactory,
+        Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> logger)
     {
+        _logger = logger;
+        _httpFactory = httpFactory;
         _settings = settings;
         _gameDetection = gameDetection;
         _modDiscovery = modDiscovery;
@@ -259,6 +266,22 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 vm.GroupId = null;
                 newActive.Add(vm);
+            }
+        }
+
+        // Dispose stale headers/ghosts before dropping them (H9): both are
+        // recreated on every call and would otherwise accumulate event handlers
+        // on the singleton localization service.
+        foreach (var item in FilteredAvailableMods.Concat(FilteredActiveMods))
+        {
+            switch (item)
+            {
+                case ModGroupHeaderViewModel header:
+                    header.Dispose();
+                    break;
+                case ModItemViewModel ghost when ghost.IsMissing:
+                    ghost.Dispose();
+                    break;
             }
         }
 
@@ -556,15 +579,18 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (SelectedMod == null) return;
 
-        SetBusy(_localization.GetString("status.deactivating_mod", SelectedMod.DisplayName));
-        var success2 = await _modInstall.DeactivateModAsync(SelectedMod.ModInfo, _settings.Settings.GamePath);
+        // Snapshot before the first await — a refresh during the await can clear SelectedMod (M5)
+        var selectedVm = SelectedMod;
+        var dn = selectedVm.DisplayName;
+
+        SetBusy(_localization.GetString("status.deactivating_mod", dn));
+        var success2 = await _modInstall.DeactivateModAsync(selectedVm.ModInfo, _settings.Settings.GamePath);
         ClearBusy();
 
-        var dn = SelectedMod.DisplayName;
         if (success2)
         {
-            SelectedMod.SyncFromModel();
-            MoveToInactive(SelectedMod);
+            selectedVm.SyncFromModel();
+            MoveToInactive(selectedVm);
             StatusMessage = _localization.GetString("status.deactivated", dn);
         }
         else
@@ -594,8 +620,9 @@ public partial class MainWindowViewModel : ViewModelBase
                 await RefreshProfileListAsync();
                 StatusMessage = _localization.GetString("status.modpack_imported", uniqueName);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Profile import from {Path} failed", paths[0]);
                 StatusMessage = _localization.GetString("status.modpack_import_failed");
             }
             return;
@@ -661,11 +688,13 @@ public partial class MainWindowViewModel : ViewModelBase
                     }
                     finally
                     {
-                        try { Directory.Delete(tempDir, true); } catch { }
+                        try { Directory.Delete(tempDir, true); }
+                        catch (Exception ex) { _logger.LogDebug(ex, "Cleanup of {Path} failed", tempDir); }
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _logger.LogWarning(ex, "Modpack import from {Path} failed", zipPaths[0]);
                     ClearBusy();
                     StatusMessage = _localization.GetString("status.modpack_import_failed");
                 }
@@ -796,6 +825,66 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Activates exactly the given mods (each with dependency resolution).
+    /// Used by drag & drop instead of ActivateSelectedModCommand, which would
+    /// re-run the whole checked set on every invocation (H11).
+    /// </summary>
+    public async Task ActivateModsAsync(IReadOnlyList<ModItemViewModel> mods)
+    {
+        if (_settings.Settings.GamePath == null || mods.Count == 0) return;
+
+        SetBusy(_localization.GetString("status.activating_group", mods.Count));
+        int activated = 0;
+        var missingDeps = new List<string>();
+
+        foreach (var target in mods.ToList())
+        {
+            if (target.IsActive) continue;
+
+            var missing = await AutoActivateDependenciesAsync(target);
+            if (missing.Count > 0)
+            {
+                target.State = ModState.MissingDependency;
+                target.HasMissingDependency = true;
+                target.MissingDependencyIds = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
+                target.RefreshDisplayRequirements();
+                missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
+                continue;
+            }
+
+            var success = await _modInstall.ActivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+            if (success) { target.SyncFromModel(); MoveToActive(target); activated++; }
+        }
+
+        ClearBusy();
+        StatusMessage = missingDeps.Count > 0
+            ? _localization.GetString("status.activated_simple_missing_deps", activated, mods.Count, string.Join("; ", missingDeps))
+            : _localization.GetString("status.activated_simple", activated, mods.Count);
+    }
+
+    /// <summary>
+    /// Deactivates exactly the given mods (see <see cref="ActivateModsAsync"/> for rationale, H11).
+    /// </summary>
+    public async Task DeactivateModsAsync(IReadOnlyList<ModItemViewModel> mods)
+    {
+        if (_settings.Settings.GamePath == null || mods.Count == 0) return;
+
+        SetBusy(_localization.GetString("status.deactivating_group", mods.Count));
+        int deactivated = 0;
+
+        foreach (var target in mods.ToList())
+        {
+            if (!target.IsActive) continue;
+
+            var success = await _modInstall.DeactivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+            if (success) { target.SyncFromModel(); MoveToInactive(target); deactivated++; }
+        }
+
+        ClearBusy();
+        StatusMessage = _localization.GetString("status.deactivated_simple", deactivated, mods.Count);
+    }
+
     private bool CanInstallCompanion() => !IsCompanionModInstalled || IsCompanionModInactive;
 
     private void RecheckCompanionCanExecute()
@@ -894,8 +983,9 @@ public partial class MainWindowViewModel : ViewModelBase
             ClearBusy();
             StatusMessage = _localization.GetString("status.companion_installed");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Companion mod install failed");
             ClearBusy();
             StatusMessage = _localization.GetString("status.companion_install_failed");
         }
@@ -915,7 +1005,10 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (SelectedMod == null || _settings.Settings.GamePath == null) return;
 
-        var displayName = SelectedMod.DisplayName;
+        // Snapshot before the first await — a refresh during the await can clear SelectedMod (M5)
+        var selectedVm = SelectedMod;
+        var displayName = selectedVm.DisplayName;
+        var modId = selectedVm.Id;
         var confirmed = await _dialogService.ConfirmAsync(
             _localization.GetString("dialog.uninstall_title"),
             _localization.GetString("dialog.uninstall_message", displayName));
@@ -924,13 +1017,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
         SetBusy(_localization.GetString("busy.uninstalling_mod", displayName));
         var success = await _modInstall.UninstallModAsync(
-            SelectedMod.ModInfo, _settings.Settings.GamePath, _settings.Settings.StoragePath, hardDelete: false);
+            selectedVm.ModInfo, _settings.Settings.GamePath, _settings.Settings.StoragePath, hardDelete: false);
         ClearBusy();
 
         if (success)
         {
             // Remove from groups before refresh to prevent ghost entries
-            var modId = SelectedMod.Id;
             foreach (var g in _settings.Settings.ModGroups)
                 g.ModIds.Remove(modId);
             await _settings.SaveAsync();
@@ -978,8 +1070,10 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (SelectedMod?.ModInfo.PendingUpdate == null || _settings.Settings.GamePath == null) return;
 
-        var displayName = SelectedMod.DisplayName;
-        var update = SelectedMod.ModInfo.PendingUpdate;
+        // Snapshot before the first await — a refresh during the await can clear SelectedMod (M5)
+        var selectedVm = SelectedMod;
+        var displayName = selectedVm.DisplayName;
+        var update = selectedVm.ModInfo.PendingUpdate!;
 
         // Nexus mods (and GitHub releases without a direct asset URL) require manual download
         bool canAutoDownload = update.Source == "github" && !string.IsNullOrEmpty(update.DownloadUrl);
@@ -996,13 +1090,13 @@ public partial class MainWindowViewModel : ViewModelBase
         var progress = new Progress<double>(p =>
             BusyMessage = _localization.GetString("busy.update_progress", displayName, p));
         var success = await _modInstall.UpdateModAsync(
-            SelectedMod.ModInfo, update, _settings.Settings.GamePath, _settings.Settings.StoragePath, progress);
+            selectedVm.ModInfo, update, _settings.Settings.GamePath, _settings.Settings.StoragePath, progress);
         ClearBusy();
 
         if (success)
         {
             // Clear the pending update before refresh so the badge doesn't persist
-            SelectedMod.ModInfo.PendingUpdate = null;
+            selectedVm.ModInfo.PendingUpdate = null;
             await RefreshModsAsync();
             StatusMessage = _localization.GetString("status.updated", displayName, update.LatestVersion);
         }
@@ -1422,29 +1516,31 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (SelectedMod == null) return;
 
-        var displayName = SelectedMod.DisplayName;
+        // Snapshot before the first await — a refresh during the await can clear SelectedMod (M5)
+        var selectedVm = SelectedMod;
+        var displayName = selectedVm.DisplayName;
+        var modId = selectedVm.Id;
         var confirmed = await _dialogService.ConfirmAsync(
             _localization.GetString("dialog.remove_title"),
             _localization.GetString("dialog.remove_message", displayName));
 
         if (!confirmed) return;
 
-        var modId = SelectedMod.Id;
-
         // Try to delete the folder from disk if it still exists
         if (_settings.Settings.GamePath != null)
         {
-            var folderPath = SelectedMod.ModInfo.FolderPath;
+            var folderPath = selectedVm.ModInfo.FolderPath;
             if (!string.IsNullOrEmpty(folderPath) && Directory.Exists(folderPath))
             {
                 try { Directory.Delete(folderPath, true); }
-                catch { /* best-effort */ }
+                catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete mod folder {Path}", folderPath); }
             }
         }
 
         // Remove from the UI lists
-        AvailableMods.Remove(SelectedMod);
-        ActiveMods.Remove(SelectedMod);
+        AvailableMods.Remove(selectedVm);
+        ActiveMods.Remove(selectedVm);
+        selectedVm.Dispose();
 
         // Clean up any group references
         foreach (var g in _settings.Settings.ModGroups)
@@ -1494,6 +1590,11 @@ public partial class MainWindowViewModel : ViewModelBase
             foreach (var m in AvailableMods.Concat(ActiveMods))
                 if (m.ModInfo.PendingUpdate != null)
                     pendingUpdates.TryAdd(m.Id, m.ModInfo.PendingUpdate);
+
+            // Dispose VMs being replaced so their LanguageChanged subscriptions
+            // don't accumulate across refreshes (H9).
+            foreach (var vm in AvailableMods.Concat(ActiveMods))
+                vm.Dispose();
 
             AvailableMods.Clear();
             ActiveMods.Clear();
@@ -1665,8 +1766,13 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_settings.Settings.GamePath == null) return [];
 
-        var activeMap = ActiveMods.ToDictionary(m => m.Id, m => m.Version, StringComparer.OrdinalIgnoreCase);
-        // Use last-write-wins to handle any duplicates (e.g. mods with empty Id)
+        // Use last-write-wins to handle any duplicates (e.g. mods with empty Id) (H3):
+        // ToDictionary throws on duplicate/empty keys, so build via indexer instead.
+        var activeMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in ActiveMods)
+            if (!string.IsNullOrEmpty(m.Id))
+                activeMap[m.Id] = m.Version;
+
         var inactiveMap = new Dictionary<string, ModItemViewModel>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in AvailableMods)
             if (!string.IsNullOrEmpty(m.Id))
@@ -1819,9 +1925,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(15);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/" + AppVersion);
+            var http = _httpFactory.CreateClient("github");
             string json;
             json = await http.GetStringAsync(ManagerUpdateRepository);
 
@@ -1839,9 +1943,10 @@ public partial class MainWindowViewModel : ViewModelBase
             HasManagerUpdate = true;
             UpdateAppVersionLabel();
         }
-        catch
+        catch (Exception ex)
         {
-            // Silent — don't bother the user if the check fails
+            // Silent — don't bother the user, but do record the reason (H13)
+            _logger.LogDebug(ex, "Manager update check failed");
         }
     }
 

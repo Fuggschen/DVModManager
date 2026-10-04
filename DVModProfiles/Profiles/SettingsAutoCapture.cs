@@ -11,20 +11,46 @@ internal static class SettingsAutoCapture
 
     public static void ForgetSession() => loadedProfile = null;
 
+    public static void Init()
+    {
+        UnloadWatcher.UnloadRequested -= OnUnloadRequested;
+        UnloadWatcher.UnloadRequested += OnUnloadRequested;
+    }
+
+    private static void OnUnloadRequested()
+    {
+        if (!SceneSwitcher.IsInGameWorld)
+        {
+            return;
+        }
+
+        TryCapture();
+    }
+
     // Where the mod manager flushes every mod's settings, from its Save button and on shutdown.
     [HarmonyPatch(typeof(UnityModManager), nameof(UnityModManager.SaveSettingsAndParams))]
     private static class SaveSettingsAndParamsPatch
     {
         private static void Postfix()
         {
-            try
+            if (UnloadWatcher.isQuitting)
             {
-                Capture();
+                return;
             }
-            catch (Exception ex)
-            {
-                Main.Logger.LogException("Failed to save the changed mod settings to the loaded save's profile", ex);
-            }
+
+            TryCapture();
+        }
+    }
+
+    private static void TryCapture()
+    {
+        try
+        {
+            Capture();
+        }
+        catch (Exception ex)
+        {
+            Main.Logger.LogException("Failed to save the changed mod settings to the loaded save's profile", ex);
         }
     }
 

@@ -10,6 +10,7 @@ public class ModInstallService : IModInstallService
 {
     private readonly IVersionCacheService _versionCache;
     private readonly ISettingsService _settings;
+    private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<ModInstallService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -18,10 +19,12 @@ public class ModInstallService : IModInstallService
         AllowTrailingCommas = true
     };
 
-    public ModInstallService(IVersionCacheService versionCache, ISettingsService settings, ILogger<ModInstallService> logger)
+    public ModInstallService(IVersionCacheService versionCache, ISettingsService settings,
+        IHttpClientFactory httpFactory, ILogger<ModInstallService> logger)
     {
         _versionCache = versionCache;
         _settings = settings;
+        _httpFactory = httpFactory;
         _logger = logger;
     }
 
@@ -101,7 +104,18 @@ public class ModInstallService : IModInstallService
             await Task.Run(() =>
             {
                 Directory.CreateDirectory(Path.Combine(gamePath, "Mods.inactive"));
-                if (Directory.Exists(inactivePath)) Directory.Delete(inactivePath, true);
+
+                // Never silently destroy a leftover/other mod at the target (C3):
+                // preserve it under a conflict name instead of deleting it.
+                if (Directory.Exists(inactivePath))
+                {
+                    var conflictPath = GetConflictPath(inactivePath);
+                    _logger.LogWarning(
+                        "Inactive folder already exists at {Path}; moving it to {Conflict} instead of deleting",
+                        inactivePath, conflictPath);
+                    MoveDirectory(inactivePath, conflictPath);
+                }
+
                 MoveDirectory(activePath, inactivePath);
             }, ct);
 
@@ -124,17 +138,16 @@ public class ModInstallService : IModInstallService
         string archivePath, string gamePath, string storagePath,
         bool activate = true, CancellationToken ct = default)
     {
+        // Extract to a temp dir first to discover the mod id; always cleaned up in finally (C4)
+        var tempDir = Path.Combine(Path.GetTempPath(), "dvmm_" + Guid.NewGuid());
         try
         {
-            // Extract to a temp dir first to discover the mod id
-            var tempDir = Path.Combine(Path.GetTempPath(), "dvmm_" + Guid.NewGuid());
-            await Task.Run(() => ZipFile.ExtractToDirectory(archivePath, tempDir, overwriteFiles: true), ct);
+            await Task.Run(() => SafeExtractToDirectory(archivePath, tempDir), ct);
 
             // Determine the mod root: either the extracted folder itself or a single subdirectory
             var modRoot = FindModRoot(tempDir);
             if (modRoot == null)
             {
-                Directory.Delete(tempDir, true);
                 _logger.LogError("No Info.json found in archive {Archive}", archivePath);
                 return null;
             }
@@ -142,29 +155,41 @@ public class ModInstallService : IModInstallService
             var infoPath = InfoJsonLocator.Locate(modRoot);
             if (infoPath == null)
             {
-                Directory.Delete(tempDir, true);
                 _logger.LogError("No Info.json found in archive {Archive}", archivePath);
                 return null;
             }
             var json = await File.ReadAllTextAsync(infoPath, ct);
             var modInfo = JsonSerializer.Deserialize<ModInfo>(json, JsonOptions);
-            if (modInfo == null) { Directory.Delete(tempDir, true); return null; }
+            if (modInfo == null) return null;
+
+            // Reject malicious/invalid Ids before deriving any filesystem path (C1)
+            if (!PathSafety.IsValidModId(modInfo.Id))
+            {
+                _logger.LogError(
+                    "Rejected archive {Archive}: unsafe or empty mod Id '{Id}'", archivePath, modInfo.Id);
+                return null;
+            }
 
             var targetDir = activate
-                ? Path.Combine(gamePath, "Mods", modInfo.Id)
-                : Path.Combine(gamePath, "Mods.inactive", modInfo.Id);
+                ? PathSafety.SafeCombine(Path.Combine(gamePath, "Mods"), modInfo.Id)
+                : PathSafety.SafeCombine(Path.Combine(gamePath, "Mods.inactive"), modInfo.Id);
 
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
+
+            // Stage the new content next to the target (same volume) so the final swap
+            // is a cheap rename and the target is never left half-written (C4).
+            var stagingDir = targetDir + ".staging";
+            var backupDir  = targetDir + ".backup";
+
+            await Task.Run(() =>
+            {
+                TryDeleteDirectory(stagingDir);
+                MoveDirectory(modRoot, stagingDir);
+            }, ct);
 
             // Archive the existing installation before overwriting
             if (Directory.Exists(targetDir))
             {
-                var existing = new ModInfo
-                {
-                    Id = modInfo.Id,
-                    Version = modInfo.Version,  // use new version as label; existing may differ
-                    FolderPath = targetDir
-                };
                 // Re-read the existing Info.json if available to get accurate version
                 var existingInfo = InfoJsonLocator.Locate(targetDir);
                 if (existingInfo != null)
@@ -180,15 +205,34 @@ public class ModInstallService : IModInstallService
                                 await _versionCache.ArchiveCurrentVersionAsync(existingMod, storagePath);
                         }
                     }
-                    catch { /* archive failure is non-fatal */ }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Archiving previous version of {Id} failed (non-fatal)", modInfo.Id);
+                    }
                 }
-                Directory.Delete(targetDir, true);
             }
 
+            // Swap: target → backup, staging → target; restore backup if the move fails.
             await Task.Run(() =>
             {
-                MoveDirectory(modRoot, targetDir);
-                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+                if (Directory.Exists(targetDir))
+                {
+                    TryDeleteDirectory(backupDir);
+                    MoveDirectory(targetDir, backupDir);
+                }
+
+                try
+                {
+                    MoveDirectory(stagingDir, targetDir);
+                }
+                catch
+                {
+                    if (Directory.Exists(backupDir) && !Directory.Exists(targetDir))
+                        MoveDirectory(backupDir, targetDir);
+                    throw;
+                }
+
+                TryDeleteDirectory(backupDir);
             }, ct);
 
             modInfo.FolderPath = targetDir;
@@ -208,6 +252,11 @@ public class ModInstallService : IModInstallService
         {
             _logger.LogError(ex, "Failed to install from archive {Archive}", archivePath);
             return null;
+        }
+        finally
+        {
+            // Never leak extraction trees under the temp dir, even on failure (C4)
+            TryDeleteDirectory(tempDir);
         }
     }
 
@@ -230,11 +279,30 @@ public class ModInstallService : IModInstallService
             var modInfo = JsonSerializer.Deserialize<ModInfo>(json, JsonOptions);
             if (modInfo == null) return null;
 
+            // Reject malicious/invalid Ids before deriving any filesystem path (C1)
+            if (!PathSafety.IsValidModId(modInfo.Id))
+            {
+                _logger.LogError(
+                    "Rejected folder {Folder}: unsafe or empty mod Id '{Id}'", modFolderPath, modInfo.Id);
+                return null;
+            }
+
             var targetDir = activate
-                ? Path.Combine(gamePath, "Mods",          modInfo.Id)
-                : Path.Combine(gamePath, "Mods.inactive", modInfo.Id);
+                ? PathSafety.SafeCombine(Path.Combine(gamePath, "Mods"),          modInfo.Id)
+                : PathSafety.SafeCombine(Path.Combine(gamePath, "Mods.inactive"), modInfo.Id);
 
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
+
+            // Stage next to the target and swap — the existing install is only
+            // replaced after the copy fully succeeds (H12/L3).
+            var stagingDir = targetDir + ".staging";
+            var backupDir  = targetDir + ".backup";
+
+            await Task.Run(() =>
+            {
+                TryDeleteDirectory(stagingDir);
+                CopyDirectoryRecursive(modFolderPath, stagingDir);
+            }, ct);
 
             if (Directory.Exists(targetDir))
             {
@@ -252,12 +320,35 @@ public class ModInstallService : IModInstallService
                                 await _versionCache.ArchiveCurrentVersionAsync(existingMod, storagePath);
                         }
                     }
-                    catch { /* archive failure is non-fatal */ }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Archiving previous version of {Id} failed (non-fatal)", modInfo.Id);
+                    }
                 }
-                Directory.Delete(targetDir, true);
             }
 
-            await Task.Run(() => CopyDirectoryRecursive(modFolderPath, targetDir), ct);
+            // Swap: target → backup, staging → target; restore backup if the move fails.
+            await Task.Run(() =>
+            {
+                if (Directory.Exists(targetDir))
+                {
+                    TryDeleteDirectory(backupDir);
+                    MoveDirectory(targetDir, backupDir);
+                }
+
+                try
+                {
+                    MoveDirectory(stagingDir, targetDir);
+                }
+                catch
+                {
+                    if (Directory.Exists(backupDir) && !Directory.Exists(targetDir))
+                        MoveDirectory(backupDir, targetDir);
+                    throw;
+                }
+
+                TryDeleteDirectory(backupDir);
+            }, ct);
 
             modInfo.FolderPath = targetDir;
             modInfo.IsActive   = activate;
@@ -316,11 +407,46 @@ public class ModInstallService : IModInstallService
                 return false;
             }
 
-            // Determine current folder (active or inactive)
-            var activePath = Path.Combine(gamePath, "Mods", modId);
-            var inactivePath = Path.Combine(gamePath, "Mods.inactive", modId);
-            var currentPath = Directory.Exists(activePath) ? activePath : inactivePath;
-            var isActive = currentPath == activePath;
+            // Resolve the real mod folder via discovery — the folder name may
+            // differ from modId, and the mod may live in Mods/ or Mods.inactive/ (H1)
+            var activeRoot   = Path.Combine(gamePath, "Mods");
+            var inactiveRoot = Path.Combine(gamePath, "Mods.inactive");
+
+            var currentPath = await Task.Run(() =>
+                FindModFolderByModId(activeRoot, modId) ??
+                FindModFolderByModId(inactiveRoot, modId), ct);
+
+            if (currentPath == null)
+            {
+                // Not installed under any folder name: fall back to the convention path
+                currentPath = PathSafety.SafeCombine(
+                    inactiveRoot, PathSafety.IsValidModId(modId) ? modId : null);
+            }
+
+            // Explicitly preserve whether the mod currently lives in Mods/ or Mods.inactive/
+            var isActive = PathSafety.IsStrictlyUnder(activeRoot, currentPath);
+            _logger.LogDebug("Rollback target for {Id} is {Path} (active: {Active})",
+                modId, currentPath, isActive);
+
+            // Extract to staging first so a failed extract never destroys the
+            // current install (H12/L3).
+            var stagingDir = currentPath + ".staging";
+            var backupDir  = currentPath + ".backup";
+
+            try
+            {
+                await Task.Run(() =>
+                {
+                    TryDeleteDirectory(stagingDir);
+                    SafeExtractToDirectory(archivePath, stagingDir);
+                }, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Rollback aborted for {Id}: extraction of {Zip} failed", modId, archivePath);
+                TryDeleteDirectory(stagingDir);
+                return false;
+            }
 
             // Archive current before overwriting
             if (Directory.Exists(currentPath))
@@ -338,10 +464,33 @@ public class ModInstallService : IModInstallService
                             await _versionCache.ArchiveCurrentVersionAsync(currentMod, storagePath);
                     }
                 }
-                Directory.Delete(currentPath, true);
             }
 
-            await Task.Run(() => ZipFile.ExtractToDirectory(archivePath, currentPath, overwriteFiles: true), ct);
+            // Swap: current → backup, staging → current; restore backup on failure.
+            await Task.Run(() =>
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(currentPath)!);
+
+                if (Directory.Exists(currentPath))
+                {
+                    TryDeleteDirectory(backupDir);
+                    MoveDirectory(currentPath, backupDir);
+                }
+
+                try
+                {
+                    MoveDirectory(stagingDir, currentPath);
+                }
+                catch
+                {
+                    if (Directory.Exists(backupDir) && !Directory.Exists(currentPath))
+                        MoveDirectory(backupDir, currentPath);
+                    throw;
+                }
+
+                TryDeleteDirectory(backupDir);
+            }, ct);
+
             _logger.LogInformation("Rolled back {Id} to v{Version}", modId, version);
             return true;
         }
@@ -371,8 +520,7 @@ public class ModInstallService : IModInstallService
             Directory.CreateDirectory(downloadDir);
             var downloadPath = Path.Combine(downloadDir, $"{update.LatestVersion}.zip");
 
-            using var http = new HttpClient();
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
+            var http = _httpFactory.CreateClient("github");
             using var response = await http.GetAsync(
                 update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();
@@ -410,24 +558,82 @@ public class ModInstallService : IModInstallService
                 return false;
             }
 
-            // 3. Archive current version and remove original folder
+            // 3. Extract the update to a staging folder first — the live mod stays
+            //    untouched until the new version is fully extracted and valid (C2).
+            var livePath   = mod.FolderPath;
+            var stagingDir = livePath + ".update_staging";
+            var backupDir  = livePath + ".update_backup";
+
+            try
+            {
+                await Task.Run(() =>
+                {
+                    if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true);
+                    SafeExtractToDirectory(downloadPath, stagingDir);
+                }, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Update aborted for {Id}: extraction of {Zip} failed", mod.Id, downloadPath);
+                TryDeleteDirectory(stagingDir);
+                return false;
+            }
+
+            // Resolve the staged mod root (archives may wrap the mod in a folder)
+            var stagedRoot = FindModRoot(stagingDir);
+            if (stagedRoot == null)
+            {
+                _logger.LogError("Update aborted for {Id}: no Info.json in downloaded zip", mod.Id);
+                TryDeleteDirectory(stagingDir);
+                return false;
+            }
+
+            // 4. Archive current version, then swap: live → backup, staging → live.
+            //    On failure the backup is restored, so the old version survives a bad update.
             if (ShouldArchive)
                 await _versionCache.ArchiveCurrentVersionAsync(mod, storagePath);
 
-            // Remove the original folder now that it is archived.
-            // InstallFromArchiveAsync uses modInfo.Id (from the zip) to pick the target path,
-            // which may differ from mod.FolderPath (actual folder name on disk).
-            if (Directory.Exists(mod.FolderPath))
-                await Task.Run(() => Directory.Delete(mod.FolderPath, true), ct);
+            try
+            {
+                await Task.Run(() =>
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(livePath)!);
 
-            // 4. Install — preserves active/inactive state
-            var result = await InstallFromArchiveAsync(
-                downloadPath, gamePath, storagePath, mod.IsActive, ct);
+                    if (Directory.Exists(livePath))
+                    {
+                        if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true);
+                        MoveDirectory(livePath, backupDir);
+                    }
+
+                    try
+                    {
+                        MoveDirectory(stagedRoot, livePath);
+                    }
+                    catch
+                    {
+                        // Put the old version back before surfacing the error
+                        if (Directory.Exists(backupDir) && !Directory.Exists(livePath))
+                            MoveDirectory(backupDir, livePath);
+                        throw;
+                    }
+
+                    if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true);
+                    if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true);
+                }, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Update failed for {Id}: swap failed, previous version restored", mod.Id);
+                TryDeleteDirectory(stagingDir);
+                TryDeleteDirectory(backupDir);
+                return false;
+            }
 
             // 5. Clean up downloaded zip after successful install
             try { File.Delete(downloadPath); } catch { /* best-effort */ }
 
-            return result != null;
+            _logger.LogInformation("Updated {Id} to v{Version}", mod.Id, update.LatestVersion);
+            return true;
         }
         catch (Exception ex)
         {
@@ -448,9 +654,7 @@ public class ModInstallService : IModInstallService
             Directory.CreateDirectory(downloadDir);
             var downloadPath = Path.Combine(downloadDir, $"{Guid.NewGuid()}.zip");
 
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(60);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
+            var http = _httpFactory.CreateClient("github");
             using var response = await http.GetAsync(
                 downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();
@@ -504,6 +708,38 @@ public class ModInstallService : IModInstallService
         }
     }
 
+    /// <summary>
+    /// Extracts a zip entry-by-entry, normalizing Windows-style <c>\</c> separators
+    /// in entry paths (which are not separators on Unix) and validating that every
+    /// destination stays inside <paramref name="destinationDir"/> (zip-slip) (H4).
+    /// </summary>
+    private static void SafeExtractToDirectory(string zipPath, string destinationDir)
+    {
+        Directory.CreateDirectory(destinationDir);
+        using var archive = ZipFile.OpenRead(zipPath);
+
+        foreach (var entry in archive.Entries)
+        {
+            // Normalize entry path: '\' → '/' then to the platform separator
+            var relative = entry.FullName.Replace('\\', '/');
+            while (relative.StartsWith('/')) relative = relative.TrimStart('/');
+
+            var destination = Path.GetFullPath(Path.Combine(destinationDir, relative));
+            if (!PathSafety.IsStrictlyUnder(destinationDir, destination) &&
+                !string.Equals(destination, Path.GetFullPath(destinationDir), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Zip entry '{entry.FullName}' escapes extraction directory.");
+
+            if (string.IsNullOrEmpty(entry.Name)) // directory entry
+            {
+                Directory.CreateDirectory(destination);
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            entry.ExtractToFile(destination, overwrite: true);
+        }
+    }
+
     private static void CopyDirectoryRecursive(string source, string destination)
     {
         Directory.CreateDirectory(destination);
@@ -511,6 +747,71 @@ public class ModInstallService : IModInstallService
             File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
         foreach (var dir in Directory.GetDirectories(source))
             CopyDirectoryRecursive(dir, Path.Combine(destination, Path.GetFileName(dir)));
+    }
+
+    /// <summary>
+    /// Returns a non-existing sibling path that preserves a conflicting directory
+    /// instead of deleting it (e.g. <c>MyMod.conflict-20260924-075500</c>).
+    /// </summary>
+    private static string GetConflictPath(string path)
+    {
+        var parent = Path.GetDirectoryName(path)!;
+        var name   = Path.GetFileName(path);
+        var stamp  = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var candidate = Path.Combine(parent, $"{name}.conflict-{stamp}");
+        var n = 1;
+        while (Directory.Exists(candidate))
+            candidate = Path.Combine(parent, $"{name}.conflict-{stamp}-{n++}");
+        return candidate;
+    }
+
+    /// <summary>Best-effort recursive directory delete that never throws.</summary>
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, true);
+        }
+        catch (IOException) { /* best-effort cleanup */ }
+        catch (UnauthorizedAccessException) { /* best-effort cleanup */ }
+    }
+
+    /// <summary>
+    /// Finds a mod's folder under <paramref name="root"/> by folder name (fast path)
+    /// or by the <c>Id</c> field of its Info.json. Comparison is case-insensitive.
+    /// </summary>
+    private string? FindModFolderByModId(string root, string modId)
+    {
+        if (!Directory.Exists(root)) return null;
+
+        var dirs = Directory.GetDirectories(root);
+
+        // Fast path: folder name matches the mod id
+        foreach (var dir in dirs)
+        {
+            if (string.Equals(Path.GetFileName(dir), modId, StringComparison.OrdinalIgnoreCase))
+                return dir;
+        }
+
+        // Slow path: match the Id declared in Info.json
+        foreach (var dir in dirs)
+        {
+            var infoPath = InfoJsonLocator.Locate(dir);
+            if (infoPath == null) continue;
+            try
+            {
+                var doc = JsonSerializer.Deserialize<JsonElement>(
+                    File.ReadAllText(infoPath), JsonOptions);
+                if ((doc.TryGetProperty("Id", out var idElem) || doc.TryGetProperty("id", out idElem))
+                    && string.Equals(idElem.GetString(), modId, StringComparison.OrdinalIgnoreCase))
+                    return dir;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not read {Path} while resolving mod {Id}", infoPath, modId);
+            }
+        }
+        return null;
     }
 
     private static string? FindModRoot(string extractedDir)
@@ -536,10 +837,11 @@ public class ModInstallService : IModInstallService
         {
             using var archive = ZipFile.OpenRead(zipPath);
 
-            // Find Info.json at the root or one directory deep
+            // Find Info.json at the root or one directory deep.
+            // Count both '/' and '\' — Windows-made zips may use '\' separators (M8).
             var entry = archive.Entries.FirstOrDefault(e =>
                 string.Equals(e.Name, "Info.json", StringComparison.OrdinalIgnoreCase)
-                && e.FullName.Count(c => c == '/') <= 1);
+                && e.FullName.Count(c => c == '/' || c == '\\') <= 1);
 
             if (entry == null) return null;
 

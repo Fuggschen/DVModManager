@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DVModManager.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DVModManager.Services;
 
@@ -8,6 +9,10 @@ public class SettingsService : ISettingsService
     private static string SettingsFilePath => ManagerStorage.SettingsFilePath;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
+    private readonly ILogger<SettingsService> _logger;
+
+    public SettingsService(ILogger<SettingsService> logger) => _logger = logger;
 
     public AppSettings Settings { get; private set; } = new();
 
@@ -34,8 +39,10 @@ public class SettingsService : ISettingsService
                 Settings.CollapsedGroupIds = null; // clear legacy field
             }
         }
-        catch
+        catch (Exception ex)
         {
+            // Don't hide I/O or JSON failures — a corrupt settings file should be visible (H13)
+            _logger.LogWarning(ex, "Failed to load settings from {Path}; using defaults", SettingsFilePath);
             Settings = new AppSettings();
         }
     }

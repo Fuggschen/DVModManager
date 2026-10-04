@@ -9,10 +9,12 @@ namespace DVModManager.Services;
 public class GitHubModsService : IGitHubModsService
 {
     private readonly ILogger<GitHubModsService> _logger;
+    private readonly IHttpClientFactory _httpFactory;
     private GitHubClient? _client;
 
-    public GitHubModsService(ILogger<GitHubModsService> logger)
+    public GitHubModsService(IHttpClientFactory httpFactory, ILogger<GitHubModsService> logger)
     {
+        _httpFactory = httpFactory;
         _logger = logger;
     }
 
@@ -94,9 +96,7 @@ public class GitHubModsService : IGitHubModsService
     {
         try
         {
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(15);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
+            var http = _httpFactory.CreateClient("github");
             var json = await http.GetStringAsync(mod.Repository, ct);
             using var doc = System.Text.Json.JsonDocument.Parse(json);
 
@@ -158,10 +158,8 @@ public class GitHubModsService : IGitHubModsService
     {
         try
         {
-            // GitHub release asset downloads are plain HTTPS — use HttpClient
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(60);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("DVModManager/1.0");
+            // GitHub release asset downloads are plain HTTPS — use the shared client (M7)
+            var http = _httpFactory.CreateClient("github");
 
             using var response = await http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();

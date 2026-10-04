@@ -1,12 +1,17 @@
 using System.IO.Compression;
 using System.Text.Json;
 using DVModManager.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DVModManager.Services;
 
 public class ProfileService : IProfileService
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
+    private readonly ILogger<ProfileService> _logger;
+
+    public ProfileService(ILogger<ProfileService> logger) => _logger = logger;
 
     public async Task<IReadOnlyList<ModProfile>> GetProfilesAsync(string profilesPath)
     {
@@ -21,7 +26,11 @@ public class ProfileService : IProfileService
                 var profile = JsonSerializer.Deserialize<ModProfile>(json, JsonOptions);
                 if (profile != null) profiles.Add(profile);
             }
-            catch { /* skip corrupt profiles */ }
+            catch (Exception ex)
+            {
+                // Surface corrupt profiles in the log instead of silently hiding them (H13)
+                _logger.LogWarning(ex, "Skipping unreadable profile {Path}", file);
+            }
         }
 
         return profiles.OrderBy(p => p.Name).ToList();
@@ -37,7 +46,11 @@ public class ProfileService : IProfileService
             var json = await File.ReadAllTextAsync(filePath);
             return JsonSerializer.Deserialize<ModProfile>(json, JsonOptions);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read profile {Name} at {Path}", name, filePath);
+            return null;
+        }
     }
 
     public async Task SaveProfileAsync(ModProfile profile, string profilesPath)
@@ -159,8 +172,11 @@ public class ProfileService : IProfileService
             }
         }
 
-        // Deactivate any mods that aren't in the profile at all
-        var profileModIds = profile.Mods.Select(m => m.ModId).ToHashSet();
+        // Deactivate any mods that aren't in the profile at all.
+        // Compare case-insensitively — currentById lookup is OrdinalIgnoreCase too,
+        // so a casing difference must not deactivate an active mod (H2).
+        var profileModIds = profile.Mods.Select(m => m.ModId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var mod in currentMods.Where(m => m.IsActive && !profileModIds.Contains(m.Id)))
             toDeactivate.Add(mod.Id);
 
