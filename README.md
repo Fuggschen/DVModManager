@@ -26,6 +26,8 @@ DV Mod Manager scans your `Mods` and `Mods.inactive` folders, lets you quickly a
 - Optional automatic backup before bulk changes.
 - Safety lock while Derail Valley is running.
 
+# [Checkout the Wiki for up to date Information](https://github.com/Fuggschen/DVModManager/wiki)
+
 ## Supported Mod Metadata
 
 This app reads Unity Mod Manager style `Info.json` metadata.
@@ -131,11 +133,6 @@ the game starts or quits.
 - GitHub updates with direct downloadable assets can be installed in-app.
 - Nexus updates (and non-direct-download cases) open the mod page for manual download/install.
 
-Optional credentials in Settings:
-
-- GitHub token (to improve API rate limits. Only needed for mass downloading mods < 60/h)
-- Nexus API key
-
 ## Logging and Error Handling
 
 - File logs are written to the app logs directory.
@@ -173,65 +170,15 @@ mod's reference setup, packaging, and release process.
 
 ## Contributing
 
-Issues and pull requests are welcome.
+Check the [Wiki Pages](https://github.com/Fuggschen/DVModManager/wiki/Contributing) for more information on contributing
 
-### Branching and PR policy
-
-- Please branch from `beta` and open PRs targeting `beta`.
-- The `beta` branch is the most up-to-date integration branch.
-- PRs should only be merged after the `beta` branch build pipeline is passing.
-
-### Developer setup
-
-Requirements:
-
-- .NET SDK 8.0+
-- Derail Valley install for local testing
-
-Build and run the manager from repository root:
-
-```bash
-dotnet restore
-dotnet build DVModManager/DVModManager.csproj
-dotnet run --project DVModManager/DVModManager.csproj
-```
-
-Building the in-game mod additionally requires Derail Valley installed and a
-`DVModProfiles/Directory.Build.targets` pointing at the game's `Managed` folder (see
-[DVModProfiles/README.md](DVModProfiles/README.md)). It is not part of the manager's
-solution, so build it explicitly:
-
-```bash
-dotnet build DVModProfiles/DVModProfiles.csproj -c Release
-```
-
-### Publishing (for maintainers/contributors)
-
-The project is configured for self-contained single-file publish.
-
-CI/CD release automation:
-
-- The release workflow runs on pushed tags matching `v*`.
-- Tags created from `main` or `beta` will trigger automatic release packaging and GitHub Release creation.
-- If the tag name contains `-beta`, the created GitHub Release is marked as draft/prerelease.
-
-Windows x64:
-
-```bash
-dotnet publish DVModManager/DVModManager.csproj -c Release -r win-x64
-```
-
-Linux x64:
-
-```bash
-dotnet publish DVModManager/DVModManager.csproj -c Release -r linux-x64
-```
-
-### Contribution notes
-
-- Keep behavior safe around file operations.
-- Preserve rollback/backup guarantees.
-- Test with both active and inactive mod layouts.
+## Credits
+- [UnityModManager](https://github.com/newman55/unity-mod-manager) - For the Inspiration and foundation
+- [SharkBaitDLS](https://github.com/SharkBaitDLS) - For helping me with all kinds of things and DVModProfiles
+- [Syraphya](https://vgen.co/Syraphya) - For the Application Logo
+### Contributors
+- [SharkBaitDLS](https://github.com/SharkBaitDLS)
+- [red_rass](https://github.com/rassiMC)
 
 ## License
 
