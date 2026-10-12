@@ -17,6 +17,25 @@ public class DialogService : IDialogService
 
     public void SetOwner(Window owner) => _owner = owner;
 
+    /// <summary>
+    /// The window dialogs should be owned by. Prefers the currently active
+    /// window so popups opened from modal children (e.g. the Settings dialog)
+    /// stack above their caller instead of hanging off the main window.
+    /// </summary>
+    private Window? GetDialogOwner()
+    {
+        if (Avalonia.Application.Current?.ApplicationLifetime
+            is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            foreach (var window in desktop.Windows)
+            {
+                if (window.IsVisible && window.IsActive)
+                    return window;
+            }
+        }
+        return _owner;
+    }
+
     public async Task<string?> PickFolderAsync(string title)
     {
         if (_owner == null) return null;
@@ -100,7 +119,8 @@ public class DialogService : IDialogService
 
     public async Task ShowMessageAsync(string title, string message)
     {
-        if (_owner == null) return;
+        var owner = GetDialogOwner();
+        if (owner == null) return;
 
         var dialog = new Window
         {
@@ -109,11 +129,12 @@ public class DialogService : IDialogService
             MaxHeight = 600,
             SizeToContent = SizeToContent.Height,
             CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = BuildMessageContent(message, null)
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
+        // The OK button must actually close the dialog.
+        dialog.Content = BuildMessageContent(message, dialog.Close);
 
-        await dialog.ShowDialog(_owner);
+        await dialog.ShowDialog(owner);
     }
 
     public async Task<bool> ConfirmAsync(string title, string message)
@@ -121,7 +142,8 @@ public class DialogService : IDialogService
 
     public async Task<bool> ConfirmAsync(string title, string message, string confirmLabel, string cancelLabel)
     {
-        if (_owner == null) return false;
+        var owner = GetDialogOwner();
+        if (owner == null) return false;
 
         bool result = false;
 
@@ -144,14 +166,19 @@ public class DialogService : IDialogService
             tcs.TrySetResult(answer);
         });
 
-        await dialog.ShowDialog(_owner);
+        await dialog.ShowDialog(owner);
         return result;
     }
 
-    private Avalonia.Controls.Control BuildMessageContent(string message, Action<bool>? closeCallback)
+    /// <summary>
+    /// Builds the message popup content. <paramref name="close"/> runs when the
+    /// OK button is pressed. Internal so tests can verify the button is
+    /// actually wired to close the dialog.
+    /// </summary>
+    internal Avalonia.Controls.Control BuildMessageContent(string message, Action close)
     {
         var btn = new Button { Content = _loc.GetString("dialog.button.ok"), HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center };
-        btn.Click += (_, _) => closeCallback?.Invoke(true);
+        btn.Click += (_, _) => close();
 
         return new StackPanel
         {
@@ -203,7 +230,8 @@ public class DialogService : IDialogService
 
     public async Task<ExportOption> ShowExportOptionsAsync(string title)
     {
-        if (_owner == null) return ExportOption.Cancel;
+        var owner = GetDialogOwner();
+        if (owner == null) return ExportOption.Cancel;
 
         var tcs = new TaskCompletionSource<ExportOption>();
 
@@ -239,7 +267,7 @@ public class DialogService : IDialogService
         };
 
         dialog.Closing += (_, _) => tcs.TrySetResult(ExportOption.Cancel);
-        _ = dialog.ShowDialog(_owner);
+        _ = dialog.ShowDialog(owner);
         var result = await tcs.Task;
         if (dialog.IsVisible) dialog.Close();
         return result;
@@ -247,7 +275,8 @@ public class DialogService : IDialogService
 
     public async Task<bool> ShowModpackImportConfirmAsync(string title, ModProfile profile)
     {
-        if (_owner == null) return false;
+        var owner = GetDialogOwner();
+        if (owner == null) return false;
 
         var tcs = new TaskCompletionSource<bool>();
 
@@ -312,7 +341,7 @@ public class DialogService : IDialogService
         };
 
         dialog.Closing += (_, _) => tcs.TrySetResult(false);
-        _ = dialog.ShowDialog(_owner);
+        _ = dialog.ShowDialog(owner);
         var result = await tcs.Task;
         if (dialog.IsVisible) dialog.Close();
         return result;
@@ -320,7 +349,8 @@ public class DialogService : IDialogService
 
     public async Task<bool> ShowFailedDownloadsAsync(string title, IReadOnlyList<(string ModId, string? HomePageUrl)> failedMods)
     {
-        if (_owner == null) return false;
+        var owner = GetDialogOwner();
+        if (owner == null) return false;
 
         bool openNexus = false;
         var tcs = new TaskCompletionSource<bool>();
@@ -383,7 +413,7 @@ public class DialogService : IDialogService
 
         dialog.Closing += (_, _) => tcs.TrySetResult(false);
 
-        _ = dialog.ShowDialog(_owner);
+        _ = dialog.ShowDialog(owner);
         openNexus = await tcs.Task;
         if (dialog.IsVisible) dialog.Close();
         return openNexus;

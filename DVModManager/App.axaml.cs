@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using DVModManager.Helpers;
 using DVModManager.Models;
 using DVModManager.Services;
 using DVModManager.ViewModels;
@@ -125,6 +126,12 @@ public class App : Application
         services.AddSingleton<IGitHubModsService, GitHubModsService>();
         services.AddSingleton<INexusModsService, NexusModsService>();
         services.AddSingleton<IUpdateService, UpdateService>();
+
+        // UMM loader integration
+        services.AddSingleton<IUmmReleaseFeedService, UmmReleaseFeedService>();
+        services.AddSingleton<IUmmPayloadService, UmmPayloadService>();
+        services.AddSingleton<AssemblyPatcher>();
+        services.AddSingleton<IUmmLoaderService, UmmLoaderService>();
 
         // ViewModels
         services.AddTransient<MainWindowViewModel>();

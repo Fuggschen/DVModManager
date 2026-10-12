@@ -25,6 +25,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly IDialogService _dialogService;
     private readonly ILocalizationService _localization;
     private readonly IHttpClientFactory _httpFactory;
+    private readonly IUmmLoaderService _loaderService;
     private readonly Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> _logger;
 
     // ── Observable state ──────────────────────────────────────────────────────
@@ -94,7 +95,44 @@ public partial class MainWindowViewModel : ViewModelBase
         InstallCompanionModCommand.NotifyCanExecuteChanged();
     }
 
-    // ── Version history for selected mod ──────────────────────────────────────
+    //  UMM loader startup check
+
+    /// <summary>
+    /// When the game path is set but no UMM loader is installed, prompt the
+    /// user to install it (install happens on confirmation).
+    /// </summary>
+    private async Task PromptLoaderInstallIfMissingAsync()
+    {
+        var gamePath = _settings.Settings.GamePath;
+        if (string.IsNullOrEmpty(gamePath)) return;
+
+        try
+        {
+            var status = _loaderService.GetStatus(gamePath);
+            if (status.IsInstalled) return;
+
+            var confirmed = await _dialogService.ConfirmAsync(
+                _localization.GetString("loader.install_confirm.title"),
+                _localization.GetString("loader.install_confirm.message"));
+            if (!confirmed) return;
+
+            SetBusy(_localization.GetString("busy.installing_loader"));
+            var ok = await _loaderService.InstallAsync(gamePath);
+            ClearBusy();
+
+            var installed = _loaderService.GetStatus(gamePath);
+            StatusMessage = ok
+                ? _localization.GetString("status.loader_installed",
+                    installed.InstalledVersion ?? "?", installed.ActiveMethod?.ToString() ?? "?")
+                : _localization.GetString("status.loader_install_failed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "UMM loader startup check failed");
+        }
+    }
+
+    //  Version history for selected mod 
     [ObservableProperty] private IReadOnlyList<ModVersion> _selectedModVersionHistory = [];
     [ObservableProperty] private ModVersion? _selectedHistoryVersion;
 
@@ -126,6 +164,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IDialogService dialogService,
         ILocalizationService localization,
         IHttpClientFactory httpFactory,
+        IUmmLoaderService loaderService,
         Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> logger)
     {
         _logger = logger;
@@ -139,6 +178,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _updateService = updateService;
         _dialogService = dialogService;
         _localization = localization;
+        _loaderService = loaderService;
 
         _gameDetection.GameRunningChanged += OnGameRunningChanged;
         _modDiscovery.ModsChanged += OnModsChangedExternally;
@@ -424,6 +464,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (_settings.Settings.AutoCheckUpdatesOnStartup)
                 _ = CheckUpdatesAsync();
+
+            // Prompt to install the UMM loader when the game has none
+            await PromptLoaderInstallIfMissingAsync();
 
             _modDiscovery.StartWatching(_settings.Settings.GamePath!);
         }
