@@ -8,6 +8,7 @@ DV Mod Manager scans your `Mods` and `Mods.inactive` folders, lets you quickly a
 
 - Cross-platform desktop app (Avalonia) targeting .NET 8.
 - Auto-detects Derail Valley install path (Steam on Windows and Linux).
+- Built-in Unity Mod Manager (UMM) loader install.
 - Scans and watches `Mods` and `Mods.inactive` for changes.
 - Install mods from `.zip` archives (expects `Info.json`).
 - Create and manage custom mod groups in the Available and Active lists.
@@ -87,6 +88,26 @@ Key paths used by the app:
 - Activating/deactivating a mod moves its folder between these directories.
 
 For updates and rollbacks, current versions are archived to the local version cache before replacement/removal when applicable.
+
+## Mod Loader (UMM)
+
+Derail Valley mods run on the [Unity Mod Manager](https://github.com/newman55/unity-mod-manager)
+loader. DV Mod Manager can install, update and remove that loader for you.
+There is no need to run UMM itself:
+
+- Settings → *Mod Loader* shows the loader state (installed, version, install
+  method) and offers **Install/Update** and **Uninstall** buttons. On startup,
+  if the game has no loader yet, the app prompts to install it.
+- The loader package is downloaded on demand from UMM's official update feed
+  and cached locally (`downloads/umm/`), so nothing UMM-related ships inside
+  this app and reinstalls work offline once cached.
+- **Injection method** (Settings → Mod Loader):
+  - *Doorstop*: `winhttp.dll` + `doorstop_config.ini` in the game folder
+    (default of the Windows build).
+  - *Assembly*: IL-patches `UnityEngine.CoreModule.dll` with UMM's starter
+    (default of the Linux build; a backup is kept and
+    restored on uninstall).
+- **Updates**: the settings show the installed and latest loader version. The install button updates to the newest UMM when needed.
 
 ## Profiles
 
@@ -173,7 +194,8 @@ mod's reference setup, packaging, and release process.
 Check the [Wiki Pages](https://github.com/Fuggschen/DVModManager/wiki/Contributing) for more information on contributing
 
 ## Credits
-- [UnityModManager](https://github.com/newman55/unity-mod-manager) - For the Inspiration and foundation
+- [UnityModManager](https://github.com/newman55/unity-mod-manager) - For the Inspiration and foundation (MIT). The loader installed by this app is UMM's own work, downloaded from its official feeds and not redistributed with DV Mod Manager.
+- [UnityDoorstop](https://github.com/NeighTools/UnityDoorstop) - Doorstop proxy used by UMM's Doorstop install method (LGPL-2.1, distributed as part of UMM's packages)
 - [SharkBaitDLS](https://github.com/SharkBaitDLS) - For helping me with all kinds of things and DVModProfiles
 - [Syraphya](https://vgen.co/Syraphya) - For the Application Logo
 ### Contributors
