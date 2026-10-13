@@ -20,7 +20,7 @@ public class SettingsViewModelTests
         public Task<IReadOnlyList<string>> OpenFilesAsync(string title, string filterName, string[] extensions) => Task.FromResult<IReadOnlyList<string>>([]);
         public Task<string?> SaveFileAsync(string title, string filterName, string[] extensions, string? defaultFileName = null) => Task.FromResult<string?>(null);
         public Task<ExportOption> ShowExportOptionsAsync(string title) => Task.FromResult(ExportOption.Json);
-        public Task<bool> ShowModpackImportConfirmAsync(string title, ModProfile profile) => Task.FromResult(true);
+        public Task<ModProfile?> ShowProfileImportPreviewAsync(string title, ModProfile profile, IReadOnlyList<ProfileImportPreviewItem> items, bool showSecurityWarning) => Task.FromResult<ModProfile?>(profile);
         public Task<bool> ShowFailedDownloadsAsync(string title, IReadOnlyList<(string ModId, string? HomePageUrl)> failedMods) => Task.FromResult(false);
     }
 

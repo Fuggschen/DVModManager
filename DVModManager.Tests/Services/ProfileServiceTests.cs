@@ -122,4 +122,46 @@ public class ProfileServiceTests
         // ToDownload: ModToDownload
         Assert.Contains(diff.ToDownload, d => d.ModId == "ModToDownload");
     }
+
+    [Fact]
+    public void BuildImportPreview_ClassifiesInstallStatusAndDownloadLinks()
+    {
+        var currentMods = new List<ModInfo>
+        {
+            new() { Id = "ModActive", IsActive = true, DisplayName = "Active Mod" },
+            new() { Id = "ModInactive", IsActive = false, DisplayName = "Inactive Mod" }
+        };
+
+        var profile = new ModProfile
+        {
+            Mods =
+            [
+                new ProfileModEntry { ModId = "modactive", Version = "1.0.0", IsActive = true, RepositoryUrl = "https://github.com/a/b" },
+                new ProfileModEntry { ModId = "ModInactive", Version = "2.0.0", IsActive = true },
+                new ProfileModEntry { ModId = "ModMissingWithLink", Version = "3.0.0", IsActive = true, HomePageUrl = "https://nexusmods.com/x" },
+                new ProfileModEntry { ModId = "ModMissingNoLink", Version = "4.0.0", IsActive = true }
+            ]
+        };
+
+        var preview = _service.BuildImportPreview(profile, currentMods);
+
+        Assert.Equal(4, preview.Count);
+
+        // Case-insensitive match; display name comes from the installed mod.
+        Assert.Equal(ProfileModStatus.Active, preview[0].Status);
+        Assert.Equal("Active Mod", preview[0].DisplayName);
+        Assert.True(preview[0].CanAutoDownload);
+
+        Assert.Equal(ProfileModStatus.Inactive, preview[1].Status);
+        Assert.Equal("Inactive Mod", preview[1].DisplayName);
+        Assert.False(preview[1].CanAutoDownload);
+
+        Assert.Equal(ProfileModStatus.NotInstalled, preview[2].Status);
+        Assert.True(preview[2].CanAutoDownload);
+        Assert.Equal("ModMissingWithLink", preview[2].DisplayName); // falls back to ModId
+
+        // Missing with no download link, previously skipped silently.
+        Assert.Equal(ProfileModStatus.NotInstalled, preview[3].Status);
+        Assert.False(preview[3].CanAutoDownload);
+    }
 }
