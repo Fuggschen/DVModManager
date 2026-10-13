@@ -23,6 +23,9 @@ public partial class ProfileViewModel : ViewModelBase
 
     public event EventHandler<string>? ProfileApplyRequested;
 
+    /// <summary>Mods installed here, set by the caller before the dialog opens.</summary>
+    public IReadOnlyList<ModInfo> CurrentMods { get; set; } = [];
+
     public ProfileViewModel(IProfileService profileService, IDialogService dialogService,
         ISettingsService settings, ILocalizationService loc)
     {
@@ -113,11 +116,18 @@ public partial class ProfileViewModel : ViewModelBase
         try
         {
             var profile = await _profileService.ImportProfileAsync(path);
+
+            // Surfaces mods missing here with no download link, which were previously skipped silently.
+            var previewItems = _profileService.BuildImportPreview(profile, CurrentMods);
+            var imported = await _dialogService.ShowProfileImportPreviewAsync(
+                _loc.GetString("import.preview.title"), profile, previewItems, showSecurityWarning: false);
+            if (imported == null) return;
+
             // Uniquify the name so an existing profile of the same name is never
             // silently overwritten (H7).
-            var uniqueName = await _profileService.GetUniqueProfileNameAsync(profile.Name, _profilesPath);
-            profile.Name = uniqueName;
-            await _profileService.SaveProfileAsync(profile, _profilesPath);
+            var uniqueName = await _profileService.GetUniqueProfileNameAsync(imported.Name, _profilesPath);
+            imported.Name = uniqueName;
+            await _profileService.SaveProfileAsync(imported, _profilesPath);
             await LoadProfilesAsync(_profilesPath);
         }
         catch (Exception ex)

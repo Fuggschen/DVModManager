@@ -656,10 +656,18 @@ public partial class MainWindowViewModel : ViewModelBase
             try
             {
                 var profile = await _profileService.ImportProfileAsync(paths[0]);
+
+                // Preview before saving; flags missing mods with no download link.
+                var currentMods = AvailableMods.Concat(ActiveMods).Select(v => v.ModInfo).ToList();
+                var previewItems = _profileService.BuildImportPreview(profile, currentMods);
+                var imported = await _dialogService.ShowProfileImportPreviewAsync(
+                    _localization.GetString("import.preview.title"), profile, previewItems, showSecurityWarning: false);
+                if (imported == null) return;
+
                 var uniqueName = await _profileService.GetUniqueProfileNameAsync(
-                    profile.Name, _settings.Settings.ProfilesPath);
-                profile.Name = uniqueName;
-                await _profileService.SaveProfileAsync(profile, _settings.Settings.ProfilesPath);
+                    imported.Name, _settings.Settings.ProfilesPath);
+                imported.Name = uniqueName;
+                await _profileService.SaveProfileAsync(imported, _settings.Settings.ProfilesPath);
                 await RefreshProfileListAsync();
                 StatusMessage = _localization.GetString("status.modpack_imported", uniqueName);
             }
@@ -695,9 +703,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (embeddedProfile != null)
             {
-                var confirmed = await _dialogService.ShowModpackImportConfirmAsync(
-                    _localization.GetString("import.modpack.title"), embeddedProfile);
-                if (!confirmed) return;
+                var currentMods = AvailableMods.Concat(ActiveMods).Select(v => v.ModInfo).ToList();
+                var previewItems = _profileService.BuildImportPreview(embeddedProfile, currentMods);
+                var imported = await _dialogService.ShowProfileImportPreviewAsync(
+                    _localization.GetString("import.modpack.title"), embeddedProfile, previewItems, showSecurityWarning: true);
+                if (imported == null) return;
 
                 SetBusy(_localization.GetString("import.modpack.title") + "…");
                 try
@@ -708,11 +718,17 @@ public partial class MainWindowViewModel : ViewModelBase
                         await Task.Run(() =>
                             System.IO.Compression.ZipFile.ExtractToDirectory(zipPaths[0], tempDir, overwriteFiles: true));
 
+                        // Honor the preview opt-out: install only the bundled mods the user kept.
+                        var keptIds = imported.Mods
+                            .Select(m => m.ModId)
+                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
                         var modsDir = Path.Combine(tempDir, "mods");
                         if (Directory.Exists(modsDir))
                         {
                             foreach (var modFolder in Directory.GetDirectories(modsDir))
                             {
+                                if (!keptIds.Contains(Path.GetFileName(modFolder)))
+                                    continue;
                                 await _modInstall.InstallFromFolderAsync(
                                     modFolder,
                                     _settings.Settings.GamePath,
@@ -722,9 +738,9 @@ public partial class MainWindowViewModel : ViewModelBase
                         }
 
                         var uniqueName = await _profileService.GetUniqueProfileNameAsync(
-                            embeddedProfile.Name, _settings.Settings.ProfilesPath);
-                        embeddedProfile.Name = uniqueName;
-                        await _profileService.SaveProfileAsync(embeddedProfile, _settings.Settings.ProfilesPath);
+                            imported.Name, _settings.Settings.ProfilesPath);
+                        imported.Name = uniqueName;
+                        await _profileService.SaveProfileAsync(imported, _settings.Settings.ProfilesPath);
                         await RefreshModsAsync();
                         await RefreshProfileListAsync();
                         StatusMessage = _localization.GetString("status.modpack_imported", uniqueName);
@@ -1726,6 +1742,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         var vm = App.Services.GetRequiredService<ProfileViewModel>();
         await vm.LoadProfilesAsync(_settings.Settings.ProfilesPath);
+        vm.CurrentMods = AvailableMods.Concat(ActiveMods).Select(v => v.ModInfo).ToList();
         var dialog = new DVModManager.Views.ProfileDialog { DataContext = vm };
         await dialog.ShowDialog(GetMainWindow());
 

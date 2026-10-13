@@ -14,6 +14,8 @@ public interface IProfileService
     /// <summary>Returns a profile name that doesn't collide with existing files, appending (2), (3) etc. as needed.</summary>
     Task<string> GetUniqueProfileNameAsync(string name, string profilesPath);
     ProfileDiff ComputeDiff(ModProfile profile, IReadOnlyList<ModInfo> currentMods);
+    /// <summary>Builds the per-mod rows shown in the import preview.</summary>
+    IReadOnlyList<ProfileImportPreviewItem> BuildImportPreview(ModProfile profile, IReadOnlyList<ModInfo> currentMods);
 }
 
 public record ProfileDiff(

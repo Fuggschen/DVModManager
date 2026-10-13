@@ -183,6 +183,33 @@ public class ProfileService : IProfileService
         return new ProfileDiff(toActivate, toDeactivate, toRollback, toDownload, toRedownload);
     }
 
+    public IReadOnlyList<ProfileImportPreviewItem> BuildImportPreview(
+        ModProfile profile, IReadOnlyList<ModInfo> currentMods)
+    {
+        // Last-write-wins lookup so duplicate IDs don't throw (same rule as ComputeDiff).
+        var currentById = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in currentMods)
+            if (!string.IsNullOrEmpty(m.Id))
+                currentById[m.Id] = m;
+
+        var items = new List<ProfileImportPreviewItem>();
+        foreach (var entry in profile.Mods)
+        {
+            currentById.TryGetValue(entry.ModId, out var current);
+            items.Add(new ProfileImportPreviewItem
+            {
+                Entry = entry,
+                DisplayName = current?.EffectiveDisplayName ?? entry.ModId,
+                Status = current == null
+                    ? ProfileModStatus.NotInstalled
+                    : (current.IsActive ? ProfileModStatus.Active : ProfileModStatus.Inactive),
+                CanAutoDownload = !string.IsNullOrEmpty(entry.RepositoryUrl)
+                                  || !string.IsNullOrEmpty(entry.HomePageUrl)
+            });
+        }
+        return items;
+    }
+
     private static string GetProfileFilePath(string name, string profilesPath) =>
         Path.Combine(profilesPath, ManagerStorage.ProfileFileName(name));
 }
