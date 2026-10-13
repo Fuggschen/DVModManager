@@ -141,25 +141,52 @@ public sealed class ModDiscoveryService : IModDiscoveryService
         }
     }
 
+    // Debounce state. FileSystemWatcher raises events on thread-pool threads (both
+    // watchers can fire at once) and Dispose() runs concurrently on shutdown, so
+    // every CancellationTokenSource touch is serialized through _debounceLock.
+    private readonly object _debounceLock = new();
     private CancellationTokenSource? _debounceCts;
+    private bool _disposed;
 
-    private void OnFileSystemChange(object sender, FileSystemEventArgs e)
+    /// <summary>
+    /// Debounce entry point for mod folder changes: cancels any pending fire and
+    /// schedules a new one 500ms out, so rapid changes (e.g., unzipping) only fire
+    /// once. Internal so tests can drive it without a real FileSystemWatcher.
+    /// </summary>
+    /// <remarks>
+    /// Must never throw past the watcher callback — an unhandled exception on the
+    /// watcher's IO completion thread terminates the whole app. The lock closes the
+    /// race where one callback disposed the previous CTS while another was still
+    /// reading its <c>Token</c> (ObjectDisposedException, fatal).
+    /// </remarks>
+    internal void OnFileSystemChange(object sender, FileSystemEventArgs e)
     {
-        // Debounce: cancel any pending fire, schedule a new one after 500ms.
-        // This ensures rapid changes (e.g., unzipping) only fire once.
-        // Interlocked.Exchange swaps the CTS atomically and lets us dispose the
-        // previous one so cancelled timers don't leak registrations (M1).
-        var next = new CancellationTokenSource();
-        var prev = Interlocked.Exchange(ref _debounceCts, next);
-        prev?.Cancel();
-        prev?.Dispose();
-
-        var token = next.Token;
-        _ = Task.Delay(500, token).ContinueWith(t =>
+        lock (_debounceLock)
         {
-            if (!t.IsCanceled)
-                ModsChanged?.Invoke(this, EventArgs.Empty);
-        }, TaskScheduler.Default);
+            if (_disposed) return;
+
+            var next = new CancellationTokenSource();
+            var prev = _debounceCts;
+            _debounceCts = next;
+            // Cancel before Dispose so the pending delay completes as canceled and
+            // cancelled timers don't leak registrations (M1).
+            CancelAndDispose(prev);
+
+            // Start the delay while `next` is guaranteed alive; touching next.Token
+            // after leaving the lock would reopen the dispose race.
+            _ = Task.Delay(500, next.Token).ContinueWith(
+                _ => ModsChanged?.Invoke(this, EventArgs.Empty),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnRanToCompletion,
+                TaskScheduler.Default);
+        }
+    }
+
+    private static void CancelAndDispose(CancellationTokenSource? cts)
+    {
+        if (cts == null) return;
+        cts.Cancel();
+        cts.Dispose();
     }
 
     public void StopWatching()
@@ -172,9 +199,12 @@ public sealed class ModDiscoveryService : IModDiscoveryService
 
     public void Dispose()
     {
-        _debounceCts?.Cancel();
-        _debounceCts?.Dispose();
-        _debounceCts = null;
+        lock (_debounceLock)
+        {
+            _disposed = true;
+            CancelAndDispose(_debounceCts);
+            _debounceCts = null;
+        }
         StopWatching();
     }
 }

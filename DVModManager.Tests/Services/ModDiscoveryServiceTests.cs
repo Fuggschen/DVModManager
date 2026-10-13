@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using DVModManager.Models;
 using DVModManager.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -93,6 +94,173 @@ public class ModDiscoveryServiceTests
         finally
         {
             if (Directory.Exists(tempModDir)) Directory.Delete(tempModDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task OnFileSystemChange_RapidChanges_DebouncesToSingleModsChanged()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "Debounce_" + Guid.NewGuid());
+        Directory.CreateDirectory(tempDir);
+
+        var fires = 0;
+        _service.ModsChanged += (_, _) => Interlocked.Increment(ref fires);
+
+        try
+        {
+            for (var i = 0; i < 20; i++)
+            {
+                _service.OnFileSystemChange(this,
+                    new FileSystemEventArgs(WatcherChangeTypes.Created, tempDir, $"mod{i}"));
+                await Task.Delay(10);
+            }
+
+            // Debounce window is 500ms after the last change; wait with slack.
+            await Task.Delay(800);
+
+            Assert.Equal(1, Volatile.Read(ref fires));
+        }
+        finally
+        {
+            _service.Dispose();
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task OnFileSystemChange_ConcurrentCallbacks_NeverThrow()
+    {
+        // Regression for the fatal ObjectDisposedException: FileSystemWatcher
+        // callbacks run on thread-pool threads and used to dispose the previous
+        // debounce CTS while a concurrent callback was still reading its Token.
+        var tempDir = Path.Combine(Path.GetTempPath(), "Race_" + Guid.NewGuid());
+        Directory.CreateDirectory(tempDir);
+
+        var errors = new ConcurrentQueue<Exception>();
+
+        try
+        {
+            var workers = Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+            {
+                for (var i = 0; i < 2000; i++)
+                {
+                    try
+                    {
+                        _service.OnFileSystemChange(this,
+                            new FileSystemEventArgs(WatcherChangeTypes.Created, tempDir, "mod" + i));
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Enqueue(ex);
+                    }
+                }
+            })).ToArray();
+
+            await Task.WhenAll(workers);
+            Assert.Empty(errors);
+        }
+        finally
+        {
+            _service.Dispose();
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task OnFileSystemChange_RacingDispose_NeverThrows()
+    {
+        // Shutdown is the other path that used to dispose a CTS another thread
+        // was still using (ObjectDisposedException on the watcher's IO thread).
+        var tempDir = Path.Combine(Path.GetTempPath(), "DisposeRace_" + Guid.NewGuid());
+        Directory.CreateDirectory(tempDir);
+
+        var errors = new ConcurrentQueue<Exception>();
+
+        try
+        {
+            var workers = Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+            {
+                for (var i = 0; i < 2000; i++)
+                {
+                    try
+                    {
+                        _service.OnFileSystemChange(this,
+                            new FileSystemEventArgs(WatcherChangeTypes.Changed, tempDir, "f" + i));
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Enqueue(ex);
+                    }
+                }
+            })).ToArray();
+
+            var disposeTask = Task.Run(() =>
+            {
+                try { _service.Dispose(); }
+                catch (Exception ex) { errors.Enqueue(ex); }
+            });
+
+            await Task.WhenAll(workers.Append(disposeTask));
+            Assert.Empty(errors);
+        }
+        finally
+        {
+            _service.Dispose();
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task Dispose_CancelsPendingDebounce()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "PendingDebounce_" + Guid.NewGuid());
+        Directory.CreateDirectory(tempDir);
+
+        var fires = 0;
+        _service.ModsChanged += (_, _) => Interlocked.Increment(ref fires);
+
+        try
+        {
+            _service.OnFileSystemChange(this,
+                new FileSystemEventArgs(WatcherChangeTypes.Created, tempDir, "mod"));
+            await Task.Delay(50); // well within the 500ms debounce window
+
+            _service.Dispose();
+            await Task.Delay(800);
+
+            Assert.Equal(0, Volatile.Read(ref fires));
+        }
+        finally
+        {
+            _service.Dispose();
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task StartWatching_ExternalFolderChange_RaisesModsChanged()
+    {
+        var tempGamePath = Path.Combine(Path.GetTempPath(), "Game_" + Guid.NewGuid());
+
+        var fires = 0;
+        _service.ModsChanged += (_, _) => Interlocked.Increment(ref fires);
+
+        try
+        {
+            _service.StartWatching(tempGamePath);
+            Directory.CreateDirectory(Path.Combine(tempGamePath, "Mods", "NewMod"));
+
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (Volatile.Read(ref fires) == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(50);
+
+            Assert.True(Volatile.Read(ref fires) >= 1,
+                "ModsChanged was not raised for an external folder change");
+        }
+        finally
+        {
+            _service.Dispose();
+            if (Directory.Exists(tempGamePath)) Directory.Delete(tempGamePath, true);
         }
     }
 }
