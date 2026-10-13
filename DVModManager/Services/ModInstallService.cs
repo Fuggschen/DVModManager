@@ -187,6 +187,12 @@ public class ModInstallService : IModInstallService
                 MoveDirectory(modRoot, stagingDir);
             }, ct);
 
+            // Runtime-generated files (e.g. UMM's Settings.xml) survive the reinstall.
+            if (Directory.Exists(targetDir))
+            {
+                await Task.Run(() => CopyMissingFilesRecursive(targetDir, stagingDir), ct);
+            }
+
             // Archive the existing installation before overwriting
             if (Directory.Exists(targetDir))
             {
@@ -303,6 +309,12 @@ public class ModInstallService : IModInstallService
                 TryDeleteDirectory(stagingDir);
                 CopyDirectoryRecursive(modFolderPath, stagingDir);
             }, ct);
+
+            // Runtime-generated files (e.g. UMM's Settings.xml) survive the install.
+            if (Directory.Exists(targetDir))
+            {
+                await Task.Run(() => CopyMissingFilesRecursive(targetDir, stagingDir), ct);
+            }
 
             if (Directory.Exists(targetDir))
             {
@@ -448,6 +460,12 @@ public class ModInstallService : IModInstallService
                 return false;
             }
 
+            // Runtime-generated files (e.g. UMM's Settings.xml) survive the rollback.
+            if (Directory.Exists(currentPath))
+            {
+                await Task.Run(() => CopyMissingFilesRecursive(currentPath, stagingDir), ct);
+            }
+
             // Archive current before overwriting
             if (Directory.Exists(currentPath))
             {
@@ -586,6 +604,15 @@ public class ModInstallService : IModInstallService
                 _logger.LogError("Update aborted for {Id}: no Info.json in downloaded zip", mod.Id);
                 TryDeleteDirectory(stagingDir);
                 return false;
+            }
+
+            // Runtime-generated files (e.g. UMM's Settings.xml) survive the update.
+            if (Directory.Exists(livePath))
+            {
+                var preserved = await Task.Run(() => CopyMissingFilesRecursive(livePath, stagedRoot), ct);
+                if (preserved > 0)
+                    _logger.LogDebug("Update of {Id}: preserved {Count} file(s) not present in the new version",
+                        mod.Id, preserved);
             }
 
             // 4. Archive current version, then swap: live → backup, staging → live.
@@ -747,6 +774,26 @@ public class ModInstallService : IModInstallService
             File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
         foreach (var dir in Directory.GetDirectories(source))
             CopyDirectoryRecursive(dir, Path.Combine(destination, Path.GetFileName(dir)));
+    }
+
+    /// <summary>
+    /// Copies files and directories missing from <paramref name="destination"/>, never overwriting.
+    /// Keeps runtime-generated files (e.g. UMM's Settings.xml) across updates.
+    /// </summary>
+    private static int CopyMissingFilesRecursive(string source, string destination)
+    {
+        var copied = 0;
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.GetFiles(source))
+        {
+            var destFile = Path.Combine(destination, Path.GetFileName(file));
+            if (File.Exists(destFile)) continue;
+            File.Copy(file, destFile);
+            copied++;
+        }
+        foreach (var dir in Directory.GetDirectories(source))
+            copied += CopyMissingFilesRecursive(dir, Path.Combine(destination, Path.GetFileName(dir)));
+        return copied;
     }
 
     /// <summary>
