@@ -66,6 +66,9 @@ public class App : Application
             e.SetObserved();
         };
 
+        // Remove the executable replaced by a self-update in the previous session
+        _ = Services.GetRequiredService<IManagerUpdateService>().CleanupOldFilesAsync();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var vm = Services.GetRequiredService<MainWindowViewModel>();
@@ -127,6 +130,7 @@ public class App : Application
         services.AddSingleton<IGitHubModsService, GitHubModsService>();
         services.AddSingleton<INexusModsService, NexusModsService>();
         services.AddSingleton<IUpdateService, UpdateService>();
+        services.AddSingleton<IManagerUpdateService, ManagerUpdateService>();
 
         // UMM loader integration
         services.AddSingleton<IUmmReleaseFeedService, UmmReleaseFeedService>();

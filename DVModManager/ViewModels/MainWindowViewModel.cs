@@ -22,6 +22,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly IVersionCacheService _versionCache;
     private readonly IProfileService _profileService;
     private readonly IUpdateService _updateService;
+    private readonly IManagerUpdateService _managerUpdate;
     private readonly IDialogService _dialogService;
     private readonly ILocalizationService _localization;
     private readonly IHttpClientFactory _httpFactory;
@@ -162,6 +163,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IVersionCacheService versionCache,
         IProfileService profileService,
         IUpdateService updateService,
+        IManagerUpdateService managerUpdate,
         IDialogService dialogService,
         ILocalizationService localization,
         IHttpClientFactory httpFactory,
@@ -178,6 +180,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _versionCache = versionCache;
         _profileService = profileService;
         _updateService = updateService;
+        _managerUpdate = managerUpdate;
         _dialogService = dialogService;
         _localization = localization;
         _loaderService = loaderService;
@@ -2164,11 +2167,62 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    public Task OpenManagerUpdateAsync()
+    public async Task OpenManagerUpdateAsync()
+    {
+        if (!HasManagerUpdate || IsBusy) return;
+
+        // Published build in a writable folder only; otherwise the release page is the way to update
+        if (!_managerUpdate.CanSelfUpdate)
+        {
+            OpenManagerReleasePage();
+            return;
+        }
+
+        var confirmed = await _dialogService.ConfirmAsync(
+            _localization.GetString("dialog.manager_update_title"),
+            _localization.GetString("dialog.manager_update_message", AppVersion, LatestManagerVersion),
+            _localization.GetString("dialog.button.update_restart"),
+            _localization.GetString("dialog.button.open_release_page"));
+        if (!confirmed)
+        {
+            OpenManagerReleasePage();
+            return;
+        }
+
+        SetBusy(_localization.GetString("busy.manager_update_downloading", 0));
+        try
+        {
+            var progress = new Progress<double>(p =>
+                BusyMessage = _localization.GetString("busy.manager_update_downloading", (int)(p * 100)));
+            var staged = await _managerUpdate.DownloadAndStageAsync(LatestManagerVersion, ManagerUpdateUrl, progress);
+
+            BusyMessage = _localization.GetString("busy.manager_update_installing");
+            _managerUpdate.ApplyUpdate(staged);
+            _managerUpdate.StartNewInstance();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Manager self-update failed");
+            ClearBusy();
+            var openPage = await _dialogService.ConfirmAsync(
+                _localization.GetString("dialog.manager_update_failed_title"),
+                _localization.GetString("dialog.manager_update_failed_message", ex.Message, Environment.NewLine + Environment.NewLine),
+                _localization.GetString("dialog.button.open_release_page"),
+                _localization.GetString("settings.button.cancel"));
+            if (openPage) OpenManagerReleasePage();
+            return;
+        }
+
+        // New instance is starting; let this one exit so its settings save hooks run
+        if (Avalonia.Application.Current?.ApplicationLifetime is
+            Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.Shutdown();
+    }
+
+    private void OpenManagerReleasePage()
     {
         if (!string.IsNullOrEmpty(ManagerUpdateUrl))
             Helpers.PlatformHelper.Open(ManagerUpdateUrl);
-        return Task.CompletedTask;
     }
 
     private static Avalonia.Controls.Window GetMainWindow()
