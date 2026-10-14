@@ -12,9 +12,13 @@ public partial class SettingsViewModel : ViewModelBase
     private readonly ISettingsService _settings;
     private readonly IUmmLoaderService _loaderService;
     private readonly IUmmReleaseFeedService _ummFeed;
+    private readonly IStorageMoveService _storageMove;
     private readonly ILocalizationService? _localization;
 
     public bool Saved { get; private set; }
+
+    // Storage path when the dialog opened; a change means the data has to move
+    private string _originalStoragePath = "";
 
     [ObservableProperty] private string _gamePath = "";
     [ObservableProperty] private string _storagePath = "";
@@ -41,13 +45,15 @@ public partial class SettingsViewModel : ViewModelBase
     };
 
     public SettingsViewModel(IDialogService dialogService, IGameDetectionService gameDetection,
-        ISettingsService settings, IUmmLoaderService loaderService, IUmmReleaseFeedService ummFeed)
+        ISettingsService settings, IUmmLoaderService loaderService, IUmmReleaseFeedService ummFeed,
+        IStorageMoveService storageMove)
     {
         _dialogService = dialogService;
         _gameDetection = gameDetection;
         _settings = settings;
         _loaderService = loaderService;
         _ummFeed = ummFeed;
+        _storageMove = storageMove;
         
         // Try to get localization service if available
         try
@@ -61,6 +67,7 @@ public partial class SettingsViewModel : ViewModelBase
     {
         GamePath = settings.GamePath ?? "";
         StoragePath = settings.StoragePath;
+        _originalStoragePath = settings.StoragePath;
         AutoCheckUpdates = settings.AutoCheckUpdatesOnStartup;
         EnableVersionArchiving = settings.EnableVersionArchiving;
         MaxCacheGb = (int)(settings.MaxCacheSizeBytes / (1024 * 1024 * 1024));
@@ -255,8 +262,23 @@ public partial class SettingsViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void Save(Avalonia.Controls.Window dialog)
+    private async Task SaveAsync(Avalonia.Controls.Window dialog)
     {
+        // Check the new storage folder before closing, so the user can still fix it.
+        // The move itself runs after the dialog closes (MainWindowViewModel.OpenSettingsAsync).
+        var messageKey = _storageMove.Check(_originalStoragePath, StoragePath) switch
+        {
+            StorageMoveCheck.InvalidPath     => "dialog.storage_invalid_message",
+            StorageMoveCheck.NotEmpty        => "dialog.storage_not_empty_message",
+            StorageMoveCheck.InsideMovedData => "dialog.storage_inside_data_message",
+            _                                => null
+        };
+        if (messageKey != null)
+        {
+            await _dialogService.ShowMessageAsync(L("dialog.storage_move_title"), L(messageKey, StoragePath));
+            return;
+        }
+
         Saved = true;
         dialog.Close();
     }

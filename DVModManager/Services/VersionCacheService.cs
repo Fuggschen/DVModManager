@@ -58,8 +58,18 @@ public class VersionCacheService : IVersionCacheService
     {
         var versions = await GetVersionHistoryAsync(modId, storagePath);
         var entry = versions.FirstOrDefault(v => v.Version == version);
-        return entry?.ArchivePath is { } path && File.Exists(path) ? path : null;
+        if (entry == null) return null;
+        var path = ResolveArchivePath(entry, modId, storagePath);
+        return File.Exists(path) ? path : null;
     }
+
+    /// <summary>
+    /// The archive's location under the current storage path. Manifests store an
+    /// absolute path, which goes stale once the storage folder is moved; the zip
+    /// always sits next to its manifest, so only its file name is used.
+    /// </summary>
+    private static string ResolveArchivePath(ModVersion entry, string modId, string storagePath) =>
+        Path.Combine(storagePath, "versions", SanitizeFileName(modId), Path.GetFileName(entry.ArchivePath));
 
     public async Task DeleteVersionAsync(string modId, string version, string storagePath)
     {
@@ -67,7 +77,8 @@ public class VersionCacheService : IVersionCacheService
         var entry = versions.FirstOrDefault(v => v.Version == version);
         if (entry == null) return;
 
-        if (File.Exists(entry.ArchivePath)) File.Delete(entry.ArchivePath);
+        var archivePath = ResolveArchivePath(entry, modId, storagePath);
+        if (File.Exists(archivePath)) File.Delete(archivePath);
         versions.Remove(entry);
 
         var manifestDir = Path.Combine(storagePath, "versions", SanitizeFileName(modId));

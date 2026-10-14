@@ -26,6 +26,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly ILocalizationService _localization;
     private readonly IHttpClientFactory _httpFactory;
     private readonly IUmmLoaderService _loaderService;
+    private readonly IStorageMoveService _storageMove;
     private readonly Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> _logger;
 
     // ── Observable state ──────────────────────────────────────────────────────
@@ -165,6 +166,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ILocalizationService localization,
         IHttpClientFactory httpFactory,
         IUmmLoaderService loaderService,
+        IStorageMoveService storageMove,
         Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> logger)
     {
         _logger = logger;
@@ -179,6 +181,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _dialogService = dialogService;
         _localization = localization;
         _loaderService = loaderService;
+        _storageMove = storageMove;
 
         _gameDetection.GameRunningChanged += OnGameRunningChanged;
         _modDiscovery.ModsChanged += OnModsChangedExternally;
@@ -1789,7 +1792,15 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             var previousGamePath = _settings.Settings.GamePath;
             var previousLanguage = _settings.Settings.Language;
+            var previousStoragePath = _settings.Settings.StoragePath;
             vm.Apply(_settings.Settings);             // copy UI values → AppSettings
+
+            // The storage path only switches once its data has been moved there
+            var newStoragePath = _settings.Settings.StoragePath;
+            _settings.Settings.StoragePath = previousStoragePath;
+            if (_storageMove.Check(previousStoragePath, newStoragePath) == StorageMoveCheck.Ok)
+                await MoveStorageAsync(previousStoragePath, newStoragePath);
+
             await _settings.SaveAsync();
             
             // Apply language change if it changed
@@ -1799,6 +1810,8 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             
             await RefreshModsAsync();
+            await RefreshProfileListAsync();
+            await LoadVersionHistoryForSelectedAsync(SelectedMod);
 
             // Restart file watchers if the game path changed
             if (_settings.Settings.GamePath != null &&
@@ -1807,6 +1820,48 @@ public partial class MainWindowViewModel : ViewModelBase
                 _modDiscovery.StartWatching(_settings.Settings.GamePath);
             }
         }
+    }
+
+    /// <summary>
+    /// Moves versions, downloads and profiles to <paramref name=newPath/> and switches
+    /// the storage path on success. On failure the old path stays in use.
+    /// </summary>
+    private async Task MoveStorageAsync(string oldPath, string newPath)
+    {
+        // Another operation may still be writing into the old storage folder
+        if (IsBusy)
+        {
+            StatusMessage = _localization.GetString("status.storage_move_busy");
+            return;
+        }
+
+        SetBusy(_localization.GetString("busy.moving_storage", newPath, 0.0));
+        var progress = new Progress<double>(p =>
+            BusyMessage = _localization.GetString("busy.moving_storage", newPath, p));
+
+        StorageMoveResult result;
+        try
+        {
+            result = await _storageMove.MoveAsync(oldPath, newPath, progress);
+        }
+        finally
+        {
+            ClearBusy();
+        }
+
+        if (result == StorageMoveResult.Failed)
+        {
+            StatusMessage = _localization.GetString("status.storage_move_failed", newPath);
+            await _dialogService.ShowMessageAsync(
+                _localization.GetString("dialog.storage_move_title"),
+                _localization.GetString("status.storage_move_failed", newPath));
+            return;
+        }
+
+        _settings.Settings.StoragePath = newPath;
+        StatusMessage = result == StorageMoveResult.MovedWithLeftovers
+            ? _localization.GetString("status.storage_moved_leftovers", newPath, oldPath)
+            : _localization.GetString("status.storage_moved", newPath);
     }
 
     [RelayCommand]

@@ -119,6 +119,7 @@ public class App : Application
         services.AddSingleton<IGameDetectionService, GameDetectionService>();
         services.AddSingleton<IModDiscoveryService, ModDiscoveryService>();
         services.AddSingleton<IVersionCacheService, VersionCacheService>();
+        services.AddSingleton<IStorageMoveService, StorageMoveService>();
         services.AddSingleton<IModInstallService, ModInstallService>();
         services.AddSingleton<IProfileService, ProfileService>();
 
