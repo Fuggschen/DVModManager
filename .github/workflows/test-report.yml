@@ -1,0 +1,22 @@
+name: Test Report
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
+on:
+  workflow_run:
+    workflows: ['Build Check']
+    types: [completed]
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dorny/test-reporter@v3
+        with:
+          artifact: /test-results-(.*)/
+          name: Tests ($1)
+          path: '*.trx'
+          reporter: dotnet-trx
+          fail-on-empty: false

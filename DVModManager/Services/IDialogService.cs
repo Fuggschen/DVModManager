@@ -19,6 +19,7 @@ public interface IDialogService
     Task<bool> ShowFailedDownloadsAsync(string title, IReadOnlyList<(string ModId, string? HomePageUrl)> failedMods);
     /// <summary>Shows export format choice: JSON, ZIP, or Cancel.</summary>
     Task<ExportOption> ShowExportOptionsAsync(string title);
-    /// <summary>Shows the mod list from a profile with a security warning. Returns true if the user confirmed the import.</summary>
-    Task<bool> ShowModpackImportConfirmAsync(string title, ModProfile profile);
+    /// <summary>Lets the user opt mods out of an import; returns the filtered profile, or null if cancelled.</summary>
+    Task<ModProfile?> ShowProfileImportPreviewAsync(
+        string title, ModProfile profile, IReadOnlyList<ProfileImportPreviewItem> items, bool showSecurityWarning);
 }

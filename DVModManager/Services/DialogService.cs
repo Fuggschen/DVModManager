@@ -17,6 +17,25 @@ public class DialogService : IDialogService
 
     public void SetOwner(Window owner) => _owner = owner;
 
+    /// <summary>
+    /// The window dialogs should be owned by. Prefers the currently active
+    /// window so popups opened from modal children (e.g. the Settings dialog)
+    /// stack above their caller instead of hanging off the main window.
+    /// </summary>
+    private Window? GetDialogOwner()
+    {
+        if (Avalonia.Application.Current?.ApplicationLifetime
+            is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            foreach (var window in desktop.Windows)
+            {
+                if (window.IsVisible && window.IsActive)
+                    return window;
+            }
+        }
+        return _owner;
+    }
+
     public async Task<string?> PickFolderAsync(string title)
     {
         if (_owner == null) return null;
@@ -100,7 +119,8 @@ public class DialogService : IDialogService
 
     public async Task ShowMessageAsync(string title, string message)
     {
-        if (_owner == null) return;
+        var owner = GetDialogOwner();
+        if (owner == null) return;
 
         var dialog = new Window
         {
@@ -109,11 +129,12 @@ public class DialogService : IDialogService
             MaxHeight = 600,
             SizeToContent = SizeToContent.Height,
             CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = BuildMessageContent(message, null)
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
+        // The OK button must actually close the dialog.
+        dialog.Content = BuildMessageContent(message, dialog.Close);
 
-        await dialog.ShowDialog(_owner);
+        await dialog.ShowDialog(owner);
     }
 
     public async Task<bool> ConfirmAsync(string title, string message)
@@ -121,7 +142,8 @@ public class DialogService : IDialogService
 
     public async Task<bool> ConfirmAsync(string title, string message, string confirmLabel, string cancelLabel)
     {
-        if (_owner == null) return false;
+        var owner = GetDialogOwner();
+        if (owner == null) return false;
 
         bool result = false;
 
@@ -144,14 +166,19 @@ public class DialogService : IDialogService
             tcs.TrySetResult(answer);
         });
 
-        await dialog.ShowDialog(_owner);
+        await dialog.ShowDialog(owner);
         return result;
     }
 
-    private Avalonia.Controls.Control BuildMessageContent(string message, Action<bool>? closeCallback)
+    /// <summary>
+    /// Builds the message popup content. <paramref name="close"/> runs when the
+    /// OK button is pressed. Internal so tests can verify the button is
+    /// actually wired to close the dialog.
+    /// </summary>
+    internal Avalonia.Controls.Control BuildMessageContent(string message, Action close)
     {
         var btn = new Button { Content = _loc.GetString("dialog.button.ok"), HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center };
-        btn.Click += (_, _) => closeCallback?.Invoke(true);
+        btn.Click += (_, _) => close();
 
         return new StackPanel
         {
@@ -203,7 +230,8 @@ public class DialogService : IDialogService
 
     public async Task<ExportOption> ShowExportOptionsAsync(string title)
     {
-        if (_owner == null) return ExportOption.Cancel;
+        var owner = GetDialogOwner();
+        if (owner == null) return ExportOption.Cancel;
 
         var tcs = new TaskCompletionSource<ExportOption>();
 
@@ -239,80 +267,155 @@ public class DialogService : IDialogService
         };
 
         dialog.Closing += (_, _) => tcs.TrySetResult(ExportOption.Cancel);
-        _ = dialog.ShowDialog(_owner);
+        _ = dialog.ShowDialog(owner);
         var result = await tcs.Task;
         if (dialog.IsVisible) dialog.Close();
         return result;
     }
 
-    public async Task<bool> ShowModpackImportConfirmAsync(string title, ModProfile profile)
+    public async Task<ModProfile?> ShowProfileImportPreviewAsync(
+        string title, ModProfile profile,
+        IReadOnlyList<ProfileImportPreviewItem> items, bool showSecurityWarning)
     {
-        if (_owner == null) return false;
+        var owner = GetDialogOwner();
+        if (owner == null) return null;
 
-        var tcs = new TaskCompletionSource<bool>();
+        var tcs = new TaskCompletionSource<ModProfile?>();
+        var checkboxes = new List<(ProfileImportPreviewItem Item, CheckBox Box)>();
 
-        var sb = new System.Text.StringBuilder();
-        foreach (var mod in profile.Mods)
-            sb.AppendLine($"  \u2022 {mod.ModId}  v{mod.Version}");
+        var content = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 12 };
 
-        var preamble = new TextBlock
+        if (showSecurityWarning)
         {
-            Text = _loc.GetString("import.modpack.preamble"),
+            content.Children.Add(new TextBlock
+            {
+                Text = _loc.GetString("import.modpack.security_warning"),
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = Brushes.OrangeRed
+            });
+        }
+
+        content.Children.Add(new TextBlock
+        {
+            Text = _loc.GetString("import.preview.header"),
             TextWrapping = TextWrapping.Wrap
-        };
-        var modList = new TextBlock
+        });
+
+        // Missing mods with no download link would be skipped silently on apply, so call them out.
+        var noLink = items
+            .Where(i => i.Status == ProfileModStatus.NotInstalled && !i.CanAutoDownload)
+            .Select(i => "  • " + i.ModId)
+            .ToList();
+        if (noLink.Count > 0)
         {
-            Text = sb.ToString().TrimEnd(),
-            FontFamily = new FontFamily("Consolas,Courier New,monospace"),
-            TextWrapping = TextWrapping.Wrap
-        };
-        var warning = new TextBlock
+            var warn = new StackPanel { Spacing = 4 };
+            warn.Children.Add(new TextBlock
+            {
+                Text = _loc.GetString("import.preview.no_link"),
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = Brushes.OrangeRed
+            });
+            warn.Children.Add(new TextBlock
+            {
+                Text = string.Join("\n", noLink),
+                TextWrapping = TextWrapping.Wrap
+            });
+            content.Children.Add(warn);
+        }
+
+        var rows = new StackPanel { Spacing = 8 };
+        foreach (var item in items)
         {
-            Text = _loc.GetString("import.modpack.security_warning"),
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = Brushes.OrangeRed
-        };
+            var box = new CheckBox { IsChecked = true, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
+            checkboxes.Add((item, box));
+
+            var statusText = item.Status switch
+            {
+                ProfileModStatus.Active => _loc.GetString("import.preview.status_active"),
+                ProfileModStatus.Inactive => _loc.GetString("import.preview.status_inactive"),
+                _ => _loc.GetString("import.preview.status_not_installed")
+            };
+            var statusBrush = item.Status switch
+            {
+                ProfileModStatus.Active => Brushes.Green,
+                ProfileModStatus.Inactive => Brushes.Gray,
+                _ => item.CanAutoDownload ? Brushes.DarkOrange : Brushes.OrangeRed
+            };
+
+            var info = new StackPanel { Spacing = 2 };
+            info.Children.Add(new TextBlock
+            {
+                Text = item.DisplayName,
+                FontWeight = FontWeight.Bold,
+                TextWrapping = TextWrapping.Wrap
+            });
+            info.Children.Add(new TextBlock
+            {
+                Text = "v" + item.Version,
+                Foreground = Brushes.Gray,
+                FontSize = 11
+            });
+            info.Children.Add(new TextBlock
+            {
+                Text = statusText,
+                Foreground = statusBrush,
+                FontSize = 11,
+                FontWeight = FontWeight.SemiBold
+            });
+            if (item.Status == ProfileModStatus.NotInstalled && !item.CanAutoDownload)
+            {
+                info.Children.Add(new TextBlock
+                {
+                    Text = _loc.GetString("import.preview.manual_only"),
+                    Foreground = Brushes.OrangeRed,
+                    FontSize = 10,
+                    FontStyle = FontStyle.Italic
+                });
+            }
+
+            var row = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 10
+            };
+            row.Children.Add(box);
+            row.Children.Add(info);
+            rows.Children.Add(row);
+        }
+
+        content.Children.Add(new ScrollViewer { MaxHeight = 300, Content = rows });
 
         var importBtn = new Button { Content = _loc.GetString("import.button.confirm") };
         var cancelBtn = new Button { Content = _loc.GetString("settings.button.cancel") };
+        importBtn.Click += (_, _) =>
+        {
+            profile.Mods = checkboxes.Where(c => c.Box.IsChecked == true)
+                                     .Select(c => c.Item.Entry).ToList();
+            tcs.TrySetResult(profile);
+        };
+        cancelBtn.Click += (_, _) => tcs.TrySetResult(null);
 
-        importBtn.Click += (_, _) => tcs.TrySetResult(true);
-        cancelBtn.Click += (_, _) => tcs.TrySetResult(false);
-
-        var buttons = new StackPanel
+        content.Children.Add(new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             Spacing = 12,
             Children = { importBtn, cancelBtn }
-        };
-
-        var content = new StackPanel
-        {
-            Margin = new Avalonia.Thickness(20),
-            Spacing = 16,
-            Children =
-            {
-                preamble,
-                new ScrollViewer { MaxHeight = 200, Content = modList },
-                warning,
-                buttons
-            }
-        };
+        });
 
         var dialog = new Window
         {
             Title = title,
             Width = 460,
-            MaxHeight = 600,
+            MaxHeight = 640,
             SizeToContent = SizeToContent.Height,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Content = content
         };
 
-        dialog.Closing += (_, _) => tcs.TrySetResult(false);
-        _ = dialog.ShowDialog(_owner);
+        dialog.Closing += (_, _) => tcs.TrySetResult(null);
+        _ = dialog.ShowDialog(owner);
         var result = await tcs.Task;
         if (dialog.IsVisible) dialog.Close();
         return result;
@@ -320,7 +423,8 @@ public class DialogService : IDialogService
 
     public async Task<bool> ShowFailedDownloadsAsync(string title, IReadOnlyList<(string ModId, string? HomePageUrl)> failedMods)
     {
-        if (_owner == null) return false;
+        var owner = GetDialogOwner();
+        if (owner == null) return false;
 
         bool openNexus = false;
         var tcs = new TaskCompletionSource<bool>();
@@ -383,7 +487,7 @@ public class DialogService : IDialogService
 
         dialog.Closing += (_, _) => tcs.TrySetResult(false);
 
-        _ = dialog.ShowDialog(_owner);
+        _ = dialog.ShowDialog(owner);
         openNexus = await tcs.Task;
         if (dialog.IsVisible) dialog.Close();
         return openNexus;

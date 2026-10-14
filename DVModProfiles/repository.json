@@ -1,5 +1,10 @@
 {
 	"Releases": [
+        {
+            "Id": "DVModProfiles",
+            "Version": "1.1.1",
+            "DownloadUrl": "https://github.com/Fuggschen/DVModManager/releases/download/dvmodprofiles-v1.1.1/DVModProfiles.zip"
+        },
 		{
 			"Id": "DVModProfiles",
 			"Version": "1.1.0",

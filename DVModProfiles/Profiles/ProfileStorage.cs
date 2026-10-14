@@ -165,8 +165,17 @@ public sealed class CloudBackend : IStorageBackend
     private const string NS = "dvmodprofiles/";
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
+    private static void EnsureSteam()
+    {
+        if (!SteamClient.IsValid)
+        {
+            throw new InvalidOperationException("Steam Cloud can't be reached: Steam has already been shut down.");
+        }
+    }
+
     public bool TryRead(string key, out string text)
     {
+        EnsureSteam();
         if (SteamRemoteStorage.FileExists(NS + key))
         {
             text = Utf8.GetString(SteamRemoteStorage.FileRead(NS + key));
@@ -179,6 +188,7 @@ public sealed class CloudBackend : IStorageBackend
 
     public void Write(string key, string text)
     {
+        EnsureSteam();
         byte[] data = Utf8.GetBytes(text);
         if ((ulong)data.Length > SteamRemoteStorage.QuotaRemainingBytes && !SteamRemoteStorage.FileExists(NS + key))
         {
@@ -194,14 +204,19 @@ public sealed class CloudBackend : IStorageBackend
 
     public void Delete(string key)
     {
+        EnsureSteam();
         if (SteamRemoteStorage.FileExists(NS + key))
         {
             SteamRemoteStorage.FileDelete(NS + key);
         }
     }
 
-    public IEnumerable<string> ListKeys(string prefix) =>
-        SteamRemoteStorage.Files
+    public IEnumerable<string> ListKeys(string prefix)
+    {
+        EnsureSteam();
+        return SteamRemoteStorage.Files
             .Where(f => f.StartsWith(NS + prefix, StringComparison.Ordinal))
-            .Select(f => f.Substring(NS.Length));
+            .Select(f => f.Substring(NS.Length))
+            .ToList();
+    }
 }

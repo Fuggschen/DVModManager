@@ -18,6 +18,22 @@ public class AppSettings : PublicSettings
     /// <summary>Maximum combined size of all version archives before pruning. Default 5 GB.</summary>
     public long MaxCacheSizeBytes { get; set; } = 5L * 1024 * 1024 * 1024;
 
+    /// <summary>
+    /// Per-build default loader method: "Doorstop" for the Windows build,
+    /// "Assembly" for the Linux build.
+    /// </summary>
+#if LOADER_DEFAULT_ASSEMBLY
+    public const string DefaultUmmLoaderMethod = "Assembly";
+#else
+    public const string DefaultUmmLoaderMethod = "Doorstop";
+#endif
+
+    /// <summary>
+    /// UMM loader injection method: "Doorstop" or "Assembly"
+    /// (see <see cref="DefaultUmmLoaderMethod"/> for the per-build default).
+    /// </summary>
+    public string UmmLoaderMethod { get; set; } = DefaultUmmLoaderMethod;
+
     /// <summary>User-defined visual groups for both mod panels.</summary>
     public List<ModGroup> ModGroups { get; set; } = [];
 

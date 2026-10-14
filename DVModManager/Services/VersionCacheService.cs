@@ -12,10 +12,10 @@ public class VersionCacheService : IVersionCacheService
     {
         if (!Directory.Exists(mod.FolderPath)) return;
 
-        var modVersionDir = Path.Combine(storagePath, "versions", mod.Id);
+        var modVersionDir = Path.Combine(storagePath, "versions", SanitizeFileName(mod.Id));
         Directory.CreateDirectory(modVersionDir);
 
-        var safeVersion = mod.Version.Replace(' ', '_').Replace('/', '_');
+        var safeVersion = SanitizeFileName(mod.Version);
         var archivePath = Path.Combine(modVersionDir, $"{safeVersion}.zip");
 
         // Overwrite any existing archive for this version
@@ -58,8 +58,18 @@ public class VersionCacheService : IVersionCacheService
     {
         var versions = await GetVersionHistoryAsync(modId, storagePath);
         var entry = versions.FirstOrDefault(v => v.Version == version);
-        return entry?.ArchivePath is { } path && File.Exists(path) ? path : null;
+        if (entry == null) return null;
+        var path = ResolveArchivePath(entry, modId, storagePath);
+        return File.Exists(path) ? path : null;
     }
+
+    /// <summary>
+    /// The archive's location under the current storage path. Manifests store an
+    /// absolute path, which goes stale once the storage folder is moved; the zip
+    /// always sits next to its manifest, so only its file name is used.
+    /// </summary>
+    private static string ResolveArchivePath(ModVersion entry, string modId, string storagePath) =>
+        Path.Combine(storagePath, "versions", SanitizeFileName(modId), Path.GetFileName(entry.ArchivePath));
 
     public async Task DeleteVersionAsync(string modId, string version, string storagePath)
     {
@@ -67,10 +77,11 @@ public class VersionCacheService : IVersionCacheService
         var entry = versions.FirstOrDefault(v => v.Version == version);
         if (entry == null) return;
 
-        if (File.Exists(entry.ArchivePath)) File.Delete(entry.ArchivePath);
+        var archivePath = ResolveArchivePath(entry, modId, storagePath);
+        if (File.Exists(archivePath)) File.Delete(archivePath);
         versions.Remove(entry);
 
-        var manifestDir = Path.Combine(storagePath, "versions", modId);
+        var manifestDir = Path.Combine(storagePath, "versions", SanitizeFileName(modId));
         await SaveManifestAsync(modId, manifestDir, versions);
     }
 
@@ -110,8 +121,31 @@ public class VersionCacheService : IVersionCacheService
         }
     }
 
+    /// <summary>Characters invalid in file names on either Windows or Unix (M3).</summary>
+    private static readonly char[] AlwaysInvalidFileNameChars =
+        { ':', '*', '?', '"', '<', '>', '|', '/', '\\' };
+
+    /// <summary>
+    /// Replaces every character that is invalid on any OS (plus spaces), so archive
+    /// names stay valid and identical no matter where the manager runs (M3).
+    /// </summary>
+    private static string SanitizeFileName(string value)
+    {
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var c in value)
+        {
+            if (c == ' ' || Array.IndexOf(AlwaysInvalidFileNameChars, c) >= 0)
+                builder.Append('_');
+            else if (c < 32) // control characters are never safe
+                builder.Append('_');
+            else
+                builder.Append(c);
+        }
+        return builder.Length == 0 ? "unknown" : builder.ToString();
+    }
+
     private static string GetManifestPath(string modId, string storagePath) =>
-        Path.Combine(storagePath, "versions", modId, "versions.json");
+        Path.Combine(storagePath, "versions", SanitizeFileName(modId), "versions.json");
 
     private static async Task SaveManifestAsync(string modId, string modVersionDir, List<ModVersion> versions)
     {

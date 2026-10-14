@@ -8,10 +8,14 @@ namespace DVModManager.ViewModels;
 
 public record DependencyDisplayItem(string Requirement, bool IsMissing);
 
-public partial class ModItemViewModel : ViewModelBase
+public partial class ModItemViewModel : ViewModelBase, IDisposable
 {
     private readonly ModInfo _modInfo;
     private readonly ILocalizationService? _localization;
+    // Kept as a field so we can unsubscribe in Dispose — a lambda would leak the
+    // whole VM via the singleton LanguageChanged event on every refresh (H9).
+    private EventHandler? _languageChangedHandler;
+    private bool _disposed;
 
     /// <summary>Normal constructor from a scanned ModInfo.</summary>
     public ModItemViewModel(ModInfo modInfo)
@@ -22,7 +26,15 @@ public partial class ModItemViewModel : ViewModelBase
         {
             _localization = App.Services.GetService(typeof(ILocalizationService)) as ILocalizationService;
             if (_localization != null)
-                _localization.LanguageChanged += (_, _) => OnPropertyChanged(nameof(StatusLabel));
+            {
+                _languageChangedHandler = (_, _) =>
+                {
+                    OnPropertyChanged(nameof(StatusLabel));
+                    OnPropertyChanged(nameof(UmmStatusLabel));
+                    OnPropertyChanged(nameof(UmmToggleLabel));
+                };
+                _localization.LanguageChanged += _languageChangedHandler;
+            }
         }
         catch
         {
@@ -30,6 +42,16 @@ public partial class ModItemViewModel : ViewModelBase
         }
 
         SyncFromModel();
+    }
+
+    /// <summary>Unsubscribes from the singleton localization event (see H9).</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_localization != null && _languageChangedHandler != null)
+            _localization.LanguageChanged -= _languageChangedHandler;
+        _languageChangedHandler = null;
     }
 
     /// <summary>Ghost constructor for a mod that is in a group but missing from disk.</summary>
@@ -51,6 +73,16 @@ public partial class ModItemViewModel : ViewModelBase
     [ObservableProperty] private string? _repository;
     [ObservableProperty] private string? _description;
     [ObservableProperty] private string[] _requirements = [];
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowUmmDisabledBadge))]
+    [NotifyPropertyChangedFor(nameof(UmmStatusLabel))]
+    [NotifyPropertyChangedFor(nameof(UmmToggleLabel))]
+    private bool _ummEnabled = true;
+
+    /// <summary>True when the mod is in the active folder but disabled in the in-game UMM window.</summary>
+    public bool ShowUmmDisabledBadge => IsActive && !UmmEnabled && !IsMissing;
+
+    partial void OnIsActiveChanged(bool value) => OnPropertyChanged(nameof(ShowUmmDisabledBadge));
 
     /// <summary>IDs of requirements that are actually missing (for display highlighting).</summary>
     public HashSet<string> MissingDependencyIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -95,6 +127,14 @@ public partial class ModItemViewModel : ViewModelBase
         _                          => LocalizeStatus("modstate.inactive", "Inactive")
     };
 
+    public string UmmStatusLabel => UmmEnabled
+        ? LocalizeStatus("modstate.umm_enabled", "In-game: enabled")
+        : LocalizeStatus("modstate.umm_disabled", "In-game: disabled");
+
+    public string UmmToggleLabel => UmmEnabled
+        ? LocalizeStatus("button.umm_disable", "Disable in-game")
+        : LocalizeStatus("button.umm_enable", "Enable in-game");
+
     public IBrush StatusBrush => State switch
     {
         ModState.Active          => new SolidColorBrush(Color.Parse("#2ecc71")),
@@ -127,6 +167,7 @@ public partial class ModItemViewModel : ViewModelBase
         Repository = _modInfo.Repository;
         Description = _modInfo.Description;
         Requirements = _modInfo.Requirements;
+        UmmEnabled = _modInfo.UmmEnabled;
 
         if (_modInfo.PendingUpdate != null)
         {

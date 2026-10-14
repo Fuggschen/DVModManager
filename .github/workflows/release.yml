@@ -24,12 +24,14 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Publish (${{ matrix.rid }})
-        run: dotnet publish DVModManager/DVModManager.csproj -c Release -r ${{ matrix.rid }} -o publish/${{ matrix.rid }}
+        run: dotnet publish DVModManager/DVModManager.csproj -c Release -r ${{ matrix.rid }} -o publish/${{ matrix.rid }} -p:DebugType=None -p:DebugSymbols=false
 
       - name: Package
         run: |
           cd publish/${{ matrix.rid }}
-          zip -r ../../DVModManager-${{ matrix.rid }}.zip .
+          exe=DVModManager
+          [ "${{ matrix.rid }}" = "win-x64" ] && exe=DVModManager.exe
+          zip ../../DVModManager-${{ matrix.rid }}.zip "$exe"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

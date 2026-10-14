@@ -5,7 +5,7 @@
         x:Class="DVModManager.Views.SettingsDialog"
         x:DataType="vm:SettingsViewModel"
         Title="{conv:Localize settings.title}"
-        Width="600" Height="500"
+        Width="600" Height="640"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
         Background="#1e1e2e">
@@ -134,6 +134,69 @@
                                   HorizontalAlignment="Right"
                                   Margin="0,8,0,0" />
                     </Grid>
+                </StackPanel>
+
+                <!--  Mod Loader (UMM)  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Text="{conv:Localize settings.section.loader}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="#cdd6f4" />
+
+                    <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                        <TextBlock Grid.Column="0"
+                                   Text="{conv:Localize settings.loader.method}"
+                                   Foreground="#cdd6f4"
+                                   FontSize="13"
+                                   VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding AvailableLoaderMethods}"
+                                  SelectedItem="{Binding LoaderMethod, Mode=TwoWay}"
+                                  ToolTip.Tip="{conv:Localize settings.loader.method.tooltip}"
+                                  Background="#313244"
+                                  BorderBrush="#45475a"
+                                  Foreground="#cdd6f4"
+                                  Width="130"
+                                  HorizontalAlignment="Right" />
+                    </Grid>
+
+                    <!-- Loader status indicator (plain text) + actions -->
+                    <Border Background="#181825"
+                            CornerRadius="4"
+                            Padding="12,10">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="{Binding LoaderIndicatorInstalled}"
+                                       Foreground="#cdd6f4"
+                                       FontSize="12" />
+                            <TextBlock Text="{Binding LoaderIndicatorInstalledVersion}"
+                                       Foreground="#cdd6f4"
+                                       FontSize="12" />
+                            <TextBlock Text="{Binding LoaderIndicatorLatestVersion}"
+                                       Foreground="#cdd6f4"
+                                       FontSize="12" />
+                            <TextBlock Text="{Binding LoaderIndicatorMethod}"
+                                       Foreground="#cdd6f4"
+                                       FontSize="12" />
+
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        Margin="0,10,0,0">
+                                <Button Content="{Binding LoaderButtonContent}"
+                                        Command="{Binding InstallLoaderCommand}"
+                                        ToolTip.Tip="{conv:Localize loader.button.tooltip}"
+                                        Background="#f9e2af"
+                                        Foreground="#1e1e2e"
+                                        Padding="12,6" />
+                                <Button Content="{conv:Localize loader.uninstall.button}"
+                                        Command="{Binding UninstallLoaderCommand}"
+                                        ToolTip.Tip="{conv:Localize loader.uninstall.tooltip}"
+                                        Background="#45475a"
+                                        Foreground="#f38ba8"
+                                        Padding="12,6"
+                                        IsVisible="{Binding IsLoaderInstalled}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
