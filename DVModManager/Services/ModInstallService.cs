@@ -743,6 +743,13 @@ public class ModInstallService : IModInstallService
     private static void SafeExtractToDirectory(string zipPath, string destinationDir)
     {
         Directory.CreateDirectory(destinationDir);
+        var rootFull = Path.GetFullPath(destinationDir);
+        if (!rootFull.EndsWith(Path.DirectorySeparatorChar))
+            rootFull += Path.DirectorySeparatorChar;
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
         using var archive = ZipFile.OpenRead(zipPath);
 
         foreach (var entry in archive.Entries)
@@ -751,9 +758,8 @@ public class ModInstallService : IModInstallService
             var relative = entry.FullName.Replace('\\', '/');
             while (relative.StartsWith('/')) relative = relative.TrimStart('/');
 
-            var destination = Path.GetFullPath(Path.Combine(destinationDir, relative));
-            if (!PathSafety.IsStrictlyUnder(destinationDir, destination) &&
-                !string.Equals(destination, Path.GetFullPath(destinationDir), StringComparison.OrdinalIgnoreCase))
+            var destination = Path.GetFullPath(Path.Combine(rootFull, relative));
+            if (!destination.StartsWith(rootFull, comparison))
                 throw new InvalidOperationException($"Zip entry '{entry.FullName}' escapes extraction directory.");
 
             if (string.IsNullOrEmpty(entry.Name)) // directory entry
