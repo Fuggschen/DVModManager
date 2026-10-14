@@ -892,31 +892,43 @@ public partial class MainWindowViewModel : ViewModelBase
     public async Task ActivateModsAsync(IReadOnlyList<ModItemViewModel> mods)
     {
         if (_settings.Settings.GamePath == null || mods.Count == 0) return;
+        if (!CanModifyFromDrop()) return;
 
         SetBusy(_localization.GetString("status.activating_group", mods.Count));
         int activated = 0;
         var missingDeps = new List<string>();
 
-        foreach (var target in mods.ToList())
+        try
         {
-            if (target.IsActive) continue;
-
-            var missing = await AutoActivateDependenciesAsync(target);
-            if (missing.Count > 0)
+            foreach (var target in mods.ToList())
             {
-                target.State = ModState.MissingDependency;
-                target.HasMissingDependency = true;
-                target.MissingDependencyIds = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
-                target.RefreshDisplayRequirements();
-                missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
-                continue;
-            }
+                if (target.IsActive) continue;
 
-            var success = await _modInstall.ActivateModAsync(target.ModInfo, _settings.Settings.GamePath);
-            if (success) { target.SyncFromModel(); MoveToActive(target); activated++; }
+                var missing = await AutoActivateDependenciesAsync(target);
+                if (missing.Count > 0)
+                {
+                    target.State = ModState.MissingDependency;
+                    target.HasMissingDependency = true;
+                    target.MissingDependencyIds = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
+                    target.RefreshDisplayRequirements();
+                    missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
+                    continue;
+                }
+
+                var success = await _modInstall.ActivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+                if (success) { target.SyncFromModel(); MoveToActive(target); activated++; }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Called fire-and-forget from drag & drop, so nothing upstream would observe this
+            _logger.LogError(ex, "Activating {Count} dropped mods failed", mods.Count);
+        }
+        finally
+        {
+            ClearBusy();
         }
 
-        ClearBusy();
         StatusMessage = missingDeps.Count > 0
             ? _localization.GetString("status.activated_simple_missing_deps", activated, mods.Count, string.Join("; ", missingDeps))
             : _localization.GetString("status.activated_simple", activated, mods.Count);
@@ -928,20 +940,46 @@ public partial class MainWindowViewModel : ViewModelBase
     public async Task DeactivateModsAsync(IReadOnlyList<ModItemViewModel> mods)
     {
         if (_settings.Settings.GamePath == null || mods.Count == 0) return;
+        if (!CanModifyFromDrop()) return;
 
         SetBusy(_localization.GetString("status.deactivating_group", mods.Count));
         int deactivated = 0;
 
-        foreach (var target in mods.ToList())
+        try
         {
-            if (!target.IsActive) continue;
+            foreach (var target in mods.ToList())
+            {
+                if (!target.IsActive) continue;
 
-            var success = await _modInstall.DeactivateModAsync(target.ModInfo, _settings.Settings.GamePath);
-            if (success) { target.SyncFromModel(); MoveToInactive(target); deactivated++; }
+                var success = await _modInstall.DeactivateModAsync(target.ModInfo, _settings.Settings.GamePath);
+                if (success) { target.SyncFromModel(); MoveToInactive(target); deactivated++; }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Deactivating {Count} dropped mods failed", mods.Count);
+        }
+        finally
+        {
+            ClearBusy();
         }
 
-        ClearBusy();
         StatusMessage = _localization.GetString("status.deactivated_simple", deactivated, mods.Count);
+    }
+
+    /// <summary>
+    /// Drag & drop bypasses the command CanExecute checks, so the drop paths
+    /// re-check them here: no file changes while the game runs or another
+    /// operation is still in progress.
+    /// </summary>
+    private bool CanModifyFromDrop()
+    {
+        if (IsGameRunning)
+        {
+            StatusMessage = _localization.GetString("status.game_running_locked");
+            return false;
+        }
+        return !IsBusy;
     }
 
     private bool CanInstallCompanion() => !IsCompanionModInstalled || IsCompanionModInactive;

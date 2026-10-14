@@ -149,6 +149,14 @@ public partial class ModListView : UserControl
         // ── Group header clicked ──────────────────────────────────────────────
         if (lbItem?.DataContext is ModGroupHeaderViewModel gvm)
         {
+            // Header controls (collapse, rename editor, rename/delete buttons) handle
+            // their own input: no group selection, and no drag that would steal
+            // the pointer from e.g. text selection in the rename box
+            var sourceVisual = e.Source as Visual;
+            if (sourceVisual?.FindAncestorOfType<Button>(includeSelf: true) != null ||
+                sourceVisual?.FindAncestorOfType<TextBox>(includeSelf: true) != null)
+                return;
+
             if (DataContext is MainWindowViewModel gVm)
             {
                 var groupMods = gVm.AvailableMods.Concat(gVm.ActiveMods)
@@ -587,7 +595,14 @@ public partial class ModListView : UserControl
         if (isGroup) return;
 
         // Same-panel: assign to group
-        string? groupId = lbItem?.DataContext is ModGroupHeaderViewModel hvm ? hvm.GroupId : null;
+        // Dropping on a header or on a mod inside a group joins that group;
+        // dropping on an ungrouped mod or empty list space removes the grouping
+        string? groupId = lbItem?.DataContext switch
+        {
+            ModGroupHeaderViewModel hvm => hvm.GroupId,
+            ModItemViewModel mvm        => mvm.GroupId,
+            _                           => null
+        };
         _ = vm.AssignModsToGroupAsync(payload.Select(m => m.Id), groupId);
     }
 
