@@ -28,6 +28,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly IHttpClientFactory _httpFactory;
     private readonly IUmmLoaderService _loaderService;
     private readonly IStorageMoveService _storageMove;
+    private readonly IUmmParamsService _ummParams;
     private readonly Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> _logger;
 
     // ── Observable state ──────────────────────────────────────────────────────
@@ -169,6 +170,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IHttpClientFactory httpFactory,
         IUmmLoaderService loaderService,
         IStorageMoveService storageMove,
+        IUmmParamsService ummParams,
         Microsoft.Extensions.Logging.ILogger<MainWindowViewModel> logger)
     {
         _logger = logger;
@@ -185,6 +187,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _localization = localization;
         _loaderService = loaderService;
         _storageMove = storageMove;
+        _ummParams = ummParams;
 
         _gameDetection.GameRunningChanged += OnGameRunningChanged;
         _modDiscovery.ModsChanged += OnModsChangedExternally;
@@ -1717,6 +1720,10 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        var ummStates = _ummParams.ReadEnabledStates(_settings.Settings.GamePath);
+        foreach (var mod in mods)
+            mod.UmmEnabled = !ummStates.TryGetValue(mod.Id, out var enabled) || enabled;
+
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             // Preserve any pending update state before clearing — RefreshModsAsync
@@ -1891,6 +1898,31 @@ public partial class MainWindowViewModel : ViewModelBase
         return await _versionCache.GetVersionHistoryAsync(SelectedMod.Id, _settings.Settings.StoragePath);
     }
 
+    // ── UMM in-game enabled flag ─────────────────────────────────────────────
+
+    [RelayCommand(CanExecute = nameof(CanModify))]
+    private async Task ToggleUmmEnabledAsync()
+    {
+        var gamePath = _settings.Settings.GamePath;
+        var mod = SelectedMod;
+        if (gamePath == null || mod == null || !mod.IsActive || mod.IsMissing) return;
+
+        var enable = !mod.UmmEnabled;
+        try
+        {
+            await _ummParams.SetEnabledAsync(gamePath, mod.Id, enable);
+            mod.ModInfo.UmmEnabled = enable;
+            mod.UmmEnabled = enable;
+            StatusMessage = _localization.GetString(
+                enable ? "status.umm_enabled_set" : "status.umm_disabled_set", mod.DisplayName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write UMM params for {ModId}", mod.Id);
+            StatusMessage = _localization.GetString("status.umm_params_write_error", ex.Message);
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private bool CanModify() => !IsGameRunning && !IsBusy;
@@ -1910,6 +1942,11 @@ public partial class MainWindowViewModel : ViewModelBase
             ApplyProfileCommand.NotifyCanExecuteChanged();
             RemoveSelectedModCommand.NotifyCanExecuteChanged();
             InstallCompanionModCommand.NotifyCanExecuteChanged();
+            ToggleUmmEnabledCommand.NotifyCanExecuteChanged();
+
+            // UMM rewrites Params.xml on exit; pick up in-game enable/disable changes.
+            if (!running && !IsBusy)
+                _ = RefreshModsAsync();
         });
     }
 
@@ -2092,6 +2129,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ActivateSelectedModCommand.NotifyCanExecuteChanged();
         DeactivateSelectedModCommand.NotifyCanExecuteChanged();
         RemoveSelectedModCommand.NotifyCanExecuteChanged();
+        ToggleUmmEnabledCommand.NotifyCanExecuteChanged();
     }
 
     private void ClearBusy()
@@ -2102,6 +2140,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ActivateSelectedModCommand.NotifyCanExecuteChanged();
         DeactivateSelectedModCommand.NotifyCanExecuteChanged();
         RemoveSelectedModCommand.NotifyCanExecuteChanged();
+        ToggleUmmEnabledCommand.NotifyCanExecuteChanged();
 
         // Process any queued external refresh that was suppressed while busy
         if (_pendingExternalRefresh)

@@ -27,7 +27,12 @@ public partial class ModItemViewModel : ViewModelBase, IDisposable
             _localization = App.Services.GetService(typeof(ILocalizationService)) as ILocalizationService;
             if (_localization != null)
             {
-                _languageChangedHandler = (_, _) => OnPropertyChanged(nameof(StatusLabel));
+                _languageChangedHandler = (_, _) =>
+                {
+                    OnPropertyChanged(nameof(StatusLabel));
+                    OnPropertyChanged(nameof(UmmStatusLabel));
+                    OnPropertyChanged(nameof(UmmToggleLabel));
+                };
                 _localization.LanguageChanged += _languageChangedHandler;
             }
         }
@@ -68,6 +73,16 @@ public partial class ModItemViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string? _repository;
     [ObservableProperty] private string? _description;
     [ObservableProperty] private string[] _requirements = [];
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowUmmDisabledBadge))]
+    [NotifyPropertyChangedFor(nameof(UmmStatusLabel))]
+    [NotifyPropertyChangedFor(nameof(UmmToggleLabel))]
+    private bool _ummEnabled = true;
+
+    /// <summary>True when the mod is in the active folder but disabled in the in-game UMM window.</summary>
+    public bool ShowUmmDisabledBadge => IsActive && !UmmEnabled && !IsMissing;
+
+    partial void OnIsActiveChanged(bool value) => OnPropertyChanged(nameof(ShowUmmDisabledBadge));
 
     /// <summary>IDs of requirements that are actually missing (for display highlighting).</summary>
     public HashSet<string> MissingDependencyIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -112,6 +127,14 @@ public partial class ModItemViewModel : ViewModelBase, IDisposable
         _                          => LocalizeStatus("modstate.inactive", "Inactive")
     };
 
+    public string UmmStatusLabel => UmmEnabled
+        ? LocalizeStatus("modstate.umm_enabled", "In-game: enabled")
+        : LocalizeStatus("modstate.umm_disabled", "In-game: disabled");
+
+    public string UmmToggleLabel => UmmEnabled
+        ? LocalizeStatus("button.umm_disable", "Disable in-game")
+        : LocalizeStatus("button.umm_enable", "Enable in-game");
+
     public IBrush StatusBrush => State switch
     {
         ModState.Active          => new SolidColorBrush(Color.Parse("#2ecc71")),
@@ -144,6 +167,7 @@ public partial class ModItemViewModel : ViewModelBase, IDisposable
         Repository = _modInfo.Repository;
         Description = _modInfo.Description;
         Requirements = _modInfo.Requirements;
+        UmmEnabled = _modInfo.UmmEnabled;
 
         if (_modInfo.PendingUpdate != null)
         {

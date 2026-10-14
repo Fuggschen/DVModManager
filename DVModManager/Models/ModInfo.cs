@@ -29,6 +29,8 @@ public class ModInfo
     [JsonIgnore] public ModState State { get; set; } = ModState.Inactive;
     [JsonIgnore] public ModUpdateInfo? PendingUpdate { get; set; }
     [JsonIgnore] public bool HasMetadata { get; set; } = true;
+    /// <summary>In-game enabled flag from UMM Params.xml (absent entry = enabled).</summary>
+    [JsonIgnore] public bool UmmEnabled { get; set; } = true;
 
     /// <summary>Effective display name: falls back to Id if DisplayName is blank.</summary>
     [JsonIgnore] public string EffectiveDisplayName =>

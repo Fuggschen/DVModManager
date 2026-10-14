@@ -137,6 +137,7 @@ public class App : Application
         services.AddSingleton<IUmmPayloadService, UmmPayloadService>();
         services.AddSingleton<AssemblyPatcher>();
         services.AddSingleton<IUmmLoaderService, UmmLoaderService>();
+        services.AddSingleton<IUmmParamsService, UmmParamsService>();
 
         // ViewModels
         services.AddTransient<MainWindowViewModel>();
