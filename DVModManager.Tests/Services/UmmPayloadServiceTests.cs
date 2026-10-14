@@ -15,7 +15,7 @@ public class UmmPayloadServiceTests : IDisposable
 
     private UmmPayloadService CreateService(StubHttpMessageHandler? handler = null)
     {
-        var settings = new SettingsService(NullLogger<SettingsService>.Instance);
+        var settings = TestData.CreateSettingsService(_workDir);
         settings.Settings.StoragePath = Path.Combine(_workDir, "storage");
         return new UmmPayloadService(
             new UmmReleaseFeedService(new StubHttpClientFactory(handler ?? new StubHttpMessageHandler()),

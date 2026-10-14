@@ -7,8 +7,12 @@ using Xunit;
 
 namespace DVModManager.Tests.ViewModels;
 
-public class SettingsViewModelTests
+public class SettingsViewModelTests : IDisposable
 {
+    private readonly string _workDir = Path.Combine(Path.GetTempPath(), "SettingsVm_" + Guid.NewGuid().ToString("N"));
+
+    public void Dispose() => TestData.DeleteDirectory(_workDir);
+
     private class DummyDialogService : IDialogService
     {
         public void SetOwner(Window owner) { }
@@ -50,7 +54,7 @@ public class SettingsViewModelTests
     {
         var gameDetection = new GameDetectionService(NullLogger<GameDetectionService>.Instance);
         var dialogService = new DummyDialogService();
-        var vm = new SettingsViewModel(dialogService, gameDetection, new SettingsService(NullLogger<SettingsService>.Instance), new StubLoaderService(), new StubUmmFeedService());
+        var vm = new SettingsViewModel(dialogService, gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService());
 
         var originalSettings = new AppSettings
         {
@@ -100,7 +104,7 @@ public class SettingsViewModelTests
     {
         var gameDetection = new GameDetectionService(NullLogger<GameDetectionService>.Instance);
         var dialogService = new DummyDialogService();
-        var vm = new SettingsViewModel(dialogService, gameDetection, new SettingsService(NullLogger<SettingsService>.Instance), new StubLoaderService(), new StubUmmFeedService());
+        var vm = new SettingsViewModel(dialogService, gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService());
 
         Assert.Contains("en", vm.AvailableLanguages);
         Assert.Contains("de", vm.AvailableLanguages);
@@ -119,7 +123,7 @@ public class SettingsViewModelTests
         // installed Doorstop instead.
         var gameDetection = new GameDetectionService(NullLogger<GameDetectionService>.Instance);
         var dialogService = new DummyDialogService();
-        var settings = new SettingsService(NullLogger<SettingsService>.Instance);
+        var settings = TestData.CreateSettingsService(_workDir);
         settings.Settings.GamePath = "/path/to/game";
         var loader = new StubLoaderService();
         var vm = new SettingsViewModel(dialogService, gameDetection, settings, loader, new StubUmmFeedService());

@@ -6,7 +6,7 @@ using Xunit;
 
 namespace DVModManager.Tests.Services;
 
-public class ModInstallServiceTests
+public class ModInstallServiceTests : IDisposable
 {
     private class DummyHttpClientFactory : IHttpClientFactory
     {
@@ -50,16 +50,20 @@ public class ModInstallServiceTests
     private readonly SettingsService _settingsService;
     private readonly ModInstallService _service;
 
+    private readonly string _settingsDir = Path.Combine(Path.GetTempPath(), "Settings_" + Guid.NewGuid().ToString("N"));
+
     public ModInstallServiceTests()
     {
         _versionCache = new VersionCacheService();
-        _settingsService = new SettingsService(NullLogger<SettingsService>.Instance);
+        _settingsService = TestData.CreateSettingsService(_settingsDir);
         _service = new ModInstallService(
             _versionCache,
             _settingsService,
             new DummyHttpClientFactory(),
             NullLogger<ModInstallService>.Instance);
     }
+
+    public void Dispose() => TestData.DeleteDirectory(_settingsDir);
 
     [Fact]
     public async Task ActivateModAsync_MovesFolderToModsDirectoryAndUpdatesModInfo()

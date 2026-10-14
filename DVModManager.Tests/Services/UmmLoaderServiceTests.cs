@@ -20,7 +20,7 @@ public class UmmLoaderServiceTests : IDisposable
 
         // Real payload via the real validation/extraction pipeline (offline).
         var zip = TestData.CreateUmmZip(_workDir);
-        _settings = new SettingsService(NullLogger<SettingsService>.Instance);
+        _settings = TestData.CreateSettingsService(_workDir);
         _settings.Settings.StoragePath = Path.Combine(_workDir, "storage");
         var payloads = new UmmPayloadService(
             new UmmReleaseFeedService(new StubHttpClientFactory(new StubHttpMessageHandler()),

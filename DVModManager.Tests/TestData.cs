@@ -3,6 +3,8 @@ using System.Net;
 using System.Text;
 using dnlib.DotNet;
 using dnlib.DotNet.Emit;
+using DVModManager.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DVModManager.Tests;
 
@@ -163,6 +165,14 @@ internal static class TestData
         module.Write(path);
         return path;
     }
+
+    /// <summary>
+    /// A real SettingsService whose settings file lives in <paramref name="directory"/>.
+    /// Never construct SettingsService without a path in tests: the default is the
+    /// user's real settings file, and any SaveAsync would overwrite it.
+    /// </summary>
+    public static SettingsService CreateSettingsService(string directory) =>
+        new(NullLogger<SettingsService>.Instance, Path.Combine(directory, "settings.json"));
 
     public static void DeleteDirectory(string path)
     {
