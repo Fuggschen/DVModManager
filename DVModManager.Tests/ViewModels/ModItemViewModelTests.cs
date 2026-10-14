@@ -101,4 +101,36 @@ public class ModItemViewModelTests
         var reqB = display.First(d => d.Requirement == "ReqB");
         Assert.True(reqB.IsMissing);
     }
+
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    public void ShowUmmDisabledBadge_OnlyForActiveAndDisabled(bool isActive, bool ummEnabled, bool expected)
+    {
+        using var vm = new ModItemViewModel(new ModInfo { Id = "M", IsActive = isActive, UmmEnabled = ummEnabled });
+
+        Assert.Equal(expected, vm.ShowUmmDisabledBadge);
+    }
+
+    [Fact]
+    public void UmmEnabledChange_UpdatesBadge()
+    {
+        using var vm = new ModItemViewModel(new ModInfo { Id = "M", IsActive = true });
+        Assert.False(vm.ShowUmmDisabledBadge);
+
+        vm.UmmEnabled = false;
+
+        Assert.True(vm.ShowUmmDisabledBadge);
+        Assert.Equal("In-game: disabled", vm.UmmStatusLabel);
+    }
+
+    [Fact]
+    public void CreateMissing_NeverShowsUmmBadge()
+    {
+        using var vm = ModItemViewModel.CreateMissing("Ghost");
+        vm.UmmEnabled = false;
+
+        Assert.False(vm.ShowUmmDisabledBadge);
+    }
 }
