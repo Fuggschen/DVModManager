@@ -12,9 +12,6 @@ namespace DVModManager.Views;
 
 public partial class ModListView : UserControl
 {
-    // Token written to DataTransfer so the drop handler can verify the source
-    private const string DragToken = "dvmm-mod-drag";
-
     // ── Styled properties ─────────────────────────────────────────────────────
 
     public static readonly StyledProperty<string> HeaderProperty =
@@ -74,12 +71,13 @@ public partial class ModListView : UserControl
     // ── Drag state ────────────────────────────────────────────────────────────
 
     private Point? _dragOrigin;
-    private PointerPressedEventArgs? _pressedArgs; // Avalonia 12: DoDragDropAsync needs the original pressed args
     private ModItemViewModel? _draggedMod;         // The mod the pointer actually pressed on
+    private ModGroupHeaderViewModel? _draggedGroup; // The group header the pointer pressed on
     private ModItemViewModel? _pendingSingleSelect; // Deferred clear-and-select (cancelled if drag starts)
 
     // Static payload holds all mods being dragged — safe because only one drag can be in-flight at a time
     private static List<ModItemViewModel>? s_dragPayload;
+    private static bool s_dragIsGroup;
 
     // ── Drag auto-scroll state
     private DispatcherTimer? _dragScrollTimer;
@@ -101,9 +99,6 @@ public partial class ModListView : UserControl
         lb.AddHandler(PointerPressedEvent,  OnListPointerPressed,  RoutingStrategies.Tunnel);
         lb.AddHandler(PointerMovedEvent,    OnListPointerMoved,    RoutingStrategies.Tunnel);
         lb.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Tunnel);
-        DragDrop.AddDragOverHandler(lb, OnListDragOver);
-        DragDrop.AddDragLeaveHandler(lb, OnListDragLeave);
-        DragDrop.AddDropHandler(lb, OnListDrop);
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -116,10 +111,8 @@ public partial class ModListView : UserControl
         lb.RemoveHandler(PointerPressedEvent,  OnListPointerPressed);
         lb.RemoveHandler(PointerMovedEvent,    OnListPointerMoved);
         lb.RemoveHandler(PointerReleasedEvent, OnListPointerReleased);
-        DragDrop.RemoveDragOverHandler(lb, OnListDragOver);
-        DragDrop.RemoveDragLeaveHandler(lb, OnListDragLeave);
-        DragDrop.RemoveDropHandler(lb, OnListDrop);
-
+        if (s_activeDrag?.Source == this)
+            EndDrag();
         StopDragAutoScroll();
     }
 
@@ -143,9 +136,9 @@ public partial class ModListView : UserControl
 
     private void OnListPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        _pressedArgs        = null;
         _dragOrigin         = null;
         _draggedMod         = null;
+        _draggedGroup       = null;
         _pendingSingleSelect = null;
         s_dragPayload       = null;
 
@@ -178,13 +171,15 @@ public partial class ModListView : UserControl
                         m.IsChecked = true;
                 }
             }
+
+            _dragOrigin   = e.GetPosition(this);
+            _draggedGroup = gvm;
             return;
         }
 
         // ── Mod item clicked ──────────────────────────────────────────────────
         if (lbItem?.DataContext is not ModItemViewModel mvm) return;
 
-        _pressedArgs = e;
         _dragOrigin  = e.GetPosition(this);
         _draggedMod  = mvm;
 
@@ -210,6 +205,14 @@ public partial class ModListView : UserControl
 
     private void OnListPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        if (s_activeDrag?.Source == this)
+        {
+            _pendingSingleSelect = null;
+            CompleteDrag(e);
+            e.Handled = true;
+            return;
+        }
+
         var pending = _pendingSingleSelect;
         _pendingSingleSelect = null;
 
@@ -224,15 +227,25 @@ public partial class ModListView : UserControl
         }
     }
 
-    private async void OnListPointerMoved(object? sender, PointerEventArgs e)
+    private void OnListPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (_draggedMod == null || _dragOrigin == null || _pressedArgs == null) return;
+        if (s_activeDrag != null)
+        {
+            if (s_activeDrag.Source == this)
+            {
+                UpdateDrag(e);
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if ((_draggedMod == null && _draggedGroup == null) || _dragOrigin == null) return;
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             s_dragPayload = null;
             _draggedMod   = null;
+            _draggedGroup = null;
             _dragOrigin   = null;
-            _pressedArgs  = null;
             return;
         }
 
@@ -240,44 +253,171 @@ public partial class ModListView : UserControl
         if (Math.Abs(delta.X) < 8 && Math.Abs(delta.Y) < 8) return;
 
         _pendingSingleSelect = null;
-        if (DataContext is MainWindowViewModel vm)
+        s_dragIsGroup = _draggedGroup != null;
+        if (_draggedGroup != null)
         {
-            var checkedMods = vm.AvailableMods.Concat(vm.ActiveMods).Where(m => m.IsChecked).ToList();
-            s_dragPayload = checkedMods.Contains(_draggedMod) && checkedMods.Count > 0
+            // Group header: drag every mod of that group shown in this panel
+            var groupId = _draggedGroup.GroupId;
+            s_dragPayload = DataContext is MainWindowViewModel gvm
+                ? (Panel == "active" ? gvm.ActiveMods : gvm.AvailableMods)
+                    .Where(m => m.GroupId == groupId)
+                    .ToList()
+                : [];
+        }
+        else if (_draggedMod is { } draggedMod)
+        {
+            var checkedMods = DataContext is MainWindowViewModel vm
+                ? vm.AvailableMods.Concat(vm.ActiveMods).Where(m => m.IsChecked).ToList()
+                : [];
+            s_dragPayload = checkedMods.Contains(draggedMod)
                 ? checkedMods
-                : [_draggedMod];
+                : [draggedMod];
         }
-        else
+
+        _dragOrigin   = null;
+        _draggedMod   = null;
+        _draggedGroup = null;
+
+        if (s_dragPayload is not { Count: > 0 })
         {
-            s_dragPayload = [_draggedMod];
+            s_dragPayload = null;
+            return;
         }
 
-        var pressedArgs = _pressedArgs;
-        _pressedArgs = null;
-        _dragOrigin  = null;
-        _draggedMod  = null;
-
-        var item     = DataTransferItem.CreateText(DragToken);
-        var transfer = new DataTransfer();
-        transfer.Add(item);
-
-        await DragDrop.DoDragDropAsync(pressedArgs, transfer, DragDropEffects.Move);
-
-        // Clear after drop (also cleared in OnListDrop, but guard here too)
-        s_dragPayload = null;
+        BeginDrag(e);
     }
 
-    private void OnListDragOver(object? sender, DragEventArgs e)
-    {
-        if (e.DataTransfer.TryGetText() != DragToken)
-            return;
+    // ── In-app drag ───────────────────────────────────────────────────────────
+    // Mod moves never leave the window, so this deliberately avoids
+    // DragDrop.DoDragDropAsync: the OS drag loop (OLE DoDragDrop on Windows) is
+    // modal and swallows mouse wheel messages. Capturing the pointer keeps all
+    // input inside Avalonia, so the wheel can scroll whichever list is hovered.
 
-        e.DragEffects = DragDropEffects.Move;
-        UpdateDragAutoScroll(e);
+    private sealed class DragSession(ModListView source, ListBox sourceList, IPointer pointer, TopLevel topLevel)
+    {
+        public ModListView Source     { get; } = source;
+        public ListBox     SourceList { get; } = sourceList;
+        public IPointer    Pointer    { get; } = pointer;
+        public TopLevel    TopLevel   { get; } = topLevel;
+        public ModListView? Hovered   { get; set; }
+    }
+
+    private static DragSession? s_activeDrag;
+
+    private static readonly Cursor s_dragMoveCursor = new(StandardCursorType.DragMove);
+    private static readonly Cursor s_noDropCursor   = new(StandardCursorType.No);
+
+    private void BeginDrag(PointerEventArgs e)
+    {
+        var lb       = this.FindControl<ListBox>("ModListBox");
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (lb == null || topLevel == null)
+        {
+            s_dragPayload = null;
+            return;
+        }
+
+        s_activeDrag = new DragSession(this, lb, e.Pointer, topLevel);
+
+        lb.AddHandler(PointerWheelChangedEvent, OnDragPointerWheel, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+        lb.PointerCaptureLost += OnDragCaptureLost;
+        topLevel.AddHandler(KeyDownEvent, OnDragKeyDown, RoutingStrategies.Tunnel);
+
+        e.Pointer.Capture(lb);
+        UpdateDrag(e);
+    }
+
+    private void UpdateDrag(PointerEventArgs e)
+    {
+        var drag = s_activeDrag;
+        if (drag == null) return;
+
+        var target = FindDragTarget(drag, e, out _);
+
+        if (drag.Hovered != target)
+        {
+            drag.Hovered?.StopDragAutoScroll();
+            drag.Hovered = target;
+        }
+
+        target?.UpdateDragAutoScroll(e);
+        drag.SourceList.Cursor = target != null ? s_dragMoveCursor : s_noDropCursor;
+    }
+
+    private void OnDragPointerWheel(object? sender, PointerWheelEventArgs e)
+    {
+        var drag = s_activeDrag;
+        if (drag == null) return;
+
+        FindDragTarget(drag, e, out _)?.ScrollListBy(-e.Delta.Y * WheelScrollStep);
+        UpdateDrag(e);
         e.Handled = true;
     }
 
-    private void UpdateDragAutoScroll(DragEventArgs e)
+    private void OnDragKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || s_activeDrag == null) return;
+        EndDrag();
+        e.Handled = true;
+    }
+
+    private void OnDragCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        // Capture was taken away (window lost focus, etc.): cancel without dropping
+        EndDrag();
+    }
+
+    private void CompleteDrag(PointerEventArgs e)
+    {
+        var drag = s_activeDrag;
+        if (drag == null) return;
+
+        var target  = FindDragTarget(drag, e, out var lbItem);
+        var payload = s_dragPayload;
+        var isGroup = s_dragIsGroup;
+        EndDrag();
+
+        if (target != null && payload is { Count: > 0 })
+            target.HandleDrop(payload, lbItem, isGroup);
+    }
+
+    private void EndDrag()
+    {
+        var drag = s_activeDrag;
+        if (drag == null) return;
+        s_activeDrag = null;
+
+        drag.SourceList.RemoveHandler(PointerWheelChangedEvent, OnDragPointerWheel);
+        drag.SourceList.PointerCaptureLost -= OnDragCaptureLost;
+        drag.TopLevel.RemoveHandler(KeyDownEvent, OnDragKeyDown);
+        drag.SourceList.Cursor = null;
+        drag.Hovered?.StopDragAutoScroll();
+
+        if (drag.Pointer.Captured == drag.SourceList)
+            drag.Pointer.Capture(null);
+
+        s_dragPayload = null;
+        s_dragIsGroup = false;
+    }
+
+    private static ModListView? FindDragTarget(DragSession drag, PointerEventArgs e, out ListBoxItem? lbItem)
+    {
+        lbItem = null;
+        var hit = drag.TopLevel.InputHitTest(e.GetPosition(drag.TopLevel)) as Visual;
+        var target = hit?.FindAncestorOfType<ModListView>(includeSelf: true);
+        if (target == null) return null;
+
+        // Only the list area accepts drops, not the header or search box
+        var targetList = target.FindControl<ListBox>("ModListBox");
+        if (targetList == null || !hit!.GetSelfAndVisualAncestors().Contains(targetList)) return null;
+
+        lbItem = hit.FindAncestorOfType<ListBoxItem>(includeSelf: true);
+        return target;
+    }
+
+    private const double WheelScrollStep = 50.0;
+
+    private void UpdateDragAutoScroll(PointerEventArgs e)
     {
         var lb = this.FindControl<ListBox>("ModListBox");
 
@@ -379,15 +519,19 @@ public partial class ModListView : UserControl
         if (_dragScrollDirection == 0)
             return;
 
-        var lb = this.FindControl<ListBox>("ModListBox");
-
-        if (lb == null)
+        if (this.FindControl<ListBox>("ModListBox") == null)
         {
             StopDragAutoScroll();
             return;
         }
 
-        var scrollViewer = lb
+        ScrollListBy(_dragScrollDirection * _dragScrollSpeed);
+    }
+
+
+    private void ScrollListBy(double deltaY)
+    {
+        var scrollViewer = this.FindControl<ListBox>("ModListBox")?
             .GetVisualDescendants()
             .OfType<ScrollViewer>()
             .FirstOrDefault();
@@ -402,7 +546,7 @@ public partial class ModListView : UserControl
             scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
 
         var newOffsetY = Math.Clamp(
-            offset.Y + (_dragScrollDirection * _dragScrollSpeed),
+            offset.Y + deltaY,
             0,
             maxOffsetY);
 
@@ -416,49 +560,35 @@ public partial class ModListView : UserControl
     }
 
 
-    private void OnListDragLeave(object? sender, DragEventArgs e)
+    private void HandleDrop(List<ModItemViewModel> payload, ListBoxItem? lbItem, bool isGroup)
     {
-        StopDragAutoScroll();
-    }
+        if (DataContext is not MainWindowViewModel vm) return;
 
-    private void OnListDrop(object? sender, DragEventArgs e)
-    {
-        StopDragAutoScroll();
+        // Determine which panel the mods were dragged from and which they were dropped on
+        bool allInactive = payload.All(m => !m.IsActive);
+        bool allActive   = payload.All(m => m.IsActive);
 
-        if (e.DataTransfer.TryGetText() != DragToken) return;
-        var payload = s_dragPayload;
-        s_dragPayload = null;
-        if (payload == null || payload.Count == 0) return;
-
-        if (DataContext is MainWindowViewModel vm)
+        // Cross-panel: dropping inactive mods on the active panel → activate
+        if (allInactive && Panel == "active")
         {
-            // Determine which panel the mods were dragged from and which they were dropped on
-            bool allInactive = payload.All(m => !m.IsActive);
-            bool allActive   = payload.All(m => m.IsActive);
-
-            // Cross-panel: dropping inactive mods on the active panel → activate
-            if (allInactive && Panel == "active")
-            {
-                _ = ActivateDroppedModsAsync(vm, payload);
-                e.Handled = true;
-                return;
-            }
-
-            // Cross-panel: dropping active mods on the inactive panel → deactivate
-            if (allActive && Panel == "available")
-            {
-                _ = DeactivateDroppedModsAsync(vm, payload);
-                e.Handled = true;
-                return;
-            }
-
-            // Same-panel: assign to group
-            var lbItem = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true);
-            string? groupId = lbItem?.DataContext is ModGroupHeaderViewModel hvm ? hvm.GroupId : null;
-            _ = vm.AssignModsToGroupAsync(payload.Select(m => m.Id), groupId);
+            _ = ActivateDroppedModsAsync(vm, payload);
+            return;
         }
 
-        e.Handled = true;
+        // Cross-panel: dropping active mods on the inactive panel → deactivate
+        if (allActive && Panel == "available")
+        {
+            _ = DeactivateDroppedModsAsync(vm, payload);
+            return;
+        }
+
+        // Same-panel group drop: groups have no ordering, and merging into
+        // another group on a stray drop would be destructive
+        if (isGroup) return;
+
+        // Same-panel: assign to group
+        string? groupId = lbItem?.DataContext is ModGroupHeaderViewModel hvm ? hvm.GroupId : null;
+        _ = vm.AssignModsToGroupAsync(payload.Select(m => m.Id), groupId);
     }
 
     private static Task ActivateDroppedModsAsync(MainWindowViewModel vm, List<ModItemViewModel> mods)
