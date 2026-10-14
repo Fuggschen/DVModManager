@@ -13,6 +13,9 @@ public class SettingsViewModelTests : IDisposable
 
     public void Dispose() => TestData.DeleteDirectory(_workDir);
 
+    private StorageMoveService CreateStorageMove() =>
+        new(NullLogger<StorageMoveService>.Instance, _workDir);
+
     private class DummyDialogService : IDialogService
     {
         public void SetOwner(Window owner) { }
@@ -54,7 +57,7 @@ public class SettingsViewModelTests : IDisposable
     {
         var gameDetection = new GameDetectionService(NullLogger<GameDetectionService>.Instance);
         var dialogService = new DummyDialogService();
-        var vm = new SettingsViewModel(dialogService, gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService());
+        var vm = new SettingsViewModel(dialogService, gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService(), CreateStorageMove());
 
         var originalSettings = new AppSettings
         {
@@ -104,7 +107,7 @@ public class SettingsViewModelTests : IDisposable
     {
         var gameDetection = new GameDetectionService(NullLogger<GameDetectionService>.Instance);
         var dialogService = new DummyDialogService();
-        var vm = new SettingsViewModel(dialogService, gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService());
+        var vm = new SettingsViewModel(dialogService, gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService(), CreateStorageMove());
 
         Assert.Contains("en", vm.AvailableLanguages);
         Assert.Contains("de", vm.AvailableLanguages);
@@ -126,7 +129,7 @@ public class SettingsViewModelTests : IDisposable
         var settings = TestData.CreateSettingsService(_workDir);
         settings.Settings.GamePath = "/path/to/game";
         var loader = new StubLoaderService();
-        var vm = new SettingsViewModel(dialogService, gameDetection, settings, loader, new StubUmmFeedService());
+        var vm = new SettingsViewModel(dialogService, gameDetection, settings, loader, new StubUmmFeedService(), CreateStorageMove());
         vm.Load(settings.Settings);
 
         vm.LoaderMethod = "Assembly";

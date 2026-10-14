@@ -49,6 +49,39 @@ public class VersionCacheServiceTests
     }
 
     [Fact]
+    public async Task ArchiveLookupAndDelete_AfterStorageFolderMoved_UseTheNewLocation()
+    {
+        // Manifests store absolute archive paths; after the storage folder moves
+        // they point at the old location and must not be trusted
+        var oldStorage = Path.Combine(Path.GetTempPath(), "Storage_" + Guid.NewGuid());
+        var newStorage = Path.Combine(Path.GetTempPath(), "Storage_" + Guid.NewGuid());
+        var tempModDir = Path.Combine(Path.GetTempPath(), "ModDir_" + Guid.NewGuid());
+        Directory.CreateDirectory(tempModDir);
+        File.WriteAllText(Path.Combine(tempModDir, "Info.json"), "{}");
+
+        try
+        {
+            await _service.ArchiveCurrentVersionAsync(
+                new ModInfo { Id = "TestMod", Version = "1.0.0", FolderPath = tempModDir }, oldStorage);
+            Directory.Move(oldStorage, newStorage);
+
+            var archivePath = await _service.GetVersionArchivePathAsync("TestMod", "1.0.0", newStorage);
+            Assert.NotNull(archivePath);
+            Assert.StartsWith(newStorage, archivePath);
+
+            await _service.DeleteVersionAsync("TestMod", "1.0.0", newStorage);
+            Assert.False(File.Exists(archivePath));
+            Assert.Empty(await _service.GetVersionHistoryAsync("TestMod", newStorage));
+        }
+        finally
+        {
+            if (Directory.Exists(oldStorage)) Directory.Delete(oldStorage, true);
+            if (Directory.Exists(newStorage)) Directory.Delete(newStorage, true);
+            if (Directory.Exists(tempModDir)) Directory.Delete(tempModDir, true);
+        }
+    }
+
+    [Fact]
     public async Task DeleteVersionAsync_RemovesZipAndManifestEntry()
     {
         var tempStorage = Path.Combine(Path.GetTempPath(), "Storage_" + Guid.NewGuid());
