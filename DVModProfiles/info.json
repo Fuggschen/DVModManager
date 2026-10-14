@@ -1,6 +1,6 @@
 {
 	"Id": "DVModProfiles",
-	"Version": "1.1.0",
+	"Version": "1.1.1",
 	"DisplayName": "DV Mod Profiles",
 	"Author": "SharkBaitDLS",
 	"EntryMethod": "DVModProfiles.Main.Load",
