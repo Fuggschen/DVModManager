@@ -257,3 +257,8 @@ settings.section.loader,Mod Loader (UMM),Mod-Loader (UMM),Chargeur de mods (UMM)
 settings.loader.method,Injection method,Injections-Methode,Méthode d'injection,
 settings.loader.method.tooltip,"Doorstop (default of the Windows build) or Assembly (default of the Linux build)","Doorstop (Standard des Windows-Builds) oder Assembly (Standard des Linux-Builds)","Doorstop (par défaut pour la version Windows) ou Assembly (par défaut pour la version Linux)",
 
+dialog.delete_version_title,Delete Cached Version,Archivierte Version löschen,Supprimer la version archivée,
+dialog.delete_version_message,"Delete the cached version {0} of {1}? You will no longer be able to roll back to it.","Archivierte Version {0} von {1} löschen? Ein Rollback auf diese Version ist danach nicht mehr möglich.","Supprimer la version archivée {0} de {1} ? Il ne sera plus possible d'y revenir.",
+button.delete_version.tooltip,Delete this cached version,Diese archivierte Version löschen,Supprimer cette version archivée,
+status.version_deleted,Deleted cached version {0} of {1},Archivierte Version {0} von {1} gelöscht,Version archivée {0} de {1} supprimée,
+status.version_delete_failed,Could not delete cached version {0} of {1},Archivierte Version {0} von {1} konnte nicht gelöscht werden,Impossible de supprimer la version archivée {0} de {1},

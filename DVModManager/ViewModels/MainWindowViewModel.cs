@@ -1269,6 +1269,40 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand(CanExecute = nameof(CanDeleteCachedVersion))]
+    private async Task DeleteCachedVersionAsync(ModVersion? version)
+    {
+        // Snapshot before the await: selection can change while the dialog is open
+        var mod = SelectedMod;
+        if (version == null || mod == null) return;
+
+        var confirmed = await _dialogService.ConfirmAsync(
+            _localization.GetString("dialog.delete_version_title"),
+            _localization.GetString("dialog.delete_version_message", version.Version, mod.DisplayName));
+        if (!confirmed) return;
+
+        // A rollback may have started while the dialog was open and be reading this archive
+        if (IsBusy) return;
+
+        try
+        {
+            await _versionCache.DeleteVersionAsync(mod.Id, version.Version, _settings.Settings.StoragePath);
+            StatusMessage = _localization.GetString("status.version_deleted", version.Version, mod.DisplayName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Deleting cached version {Version} of {Id} failed", version.Version, mod.Id);
+            StatusMessage = _localization.GetString("status.version_delete_failed", version.Version, mod.DisplayName);
+        }
+
+        if (SelectedMod == mod)
+            await LoadVersionHistoryForSelectedAsync(mod);
+    }
+
+    // Only touches the version cache, so a running game doesn't matter, but a
+    // rollback in progress might be extracting the archive
+    private bool CanDeleteCachedVersion(ModVersion? version) => version != null && !IsBusy;
+
     // ── Profiles ──────────────────────────────────────────────────────────────
 
     [RelayCommand]
@@ -1994,6 +2028,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private void SetBusy(string message)
     {
         IsBusy = true;
+        DeleteCachedVersionCommand.NotifyCanExecuteChanged();
         BusyMessage = message;
         StatusMessage = message;
         ActivateSelectedModCommand.NotifyCanExecuteChanged();
@@ -2004,6 +2039,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private void ClearBusy()
     {
         IsBusy = false;
+        DeleteCachedVersionCommand.NotifyCanExecuteChanged();
         BusyMessage = "";
         ActivateSelectedModCommand.NotifyCanExecuteChanged();
         DeactivateSelectedModCommand.NotifyCanExecuteChanged();
