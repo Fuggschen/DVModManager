@@ -294,3 +294,7 @@ dialog.multi_mod_title,Multiple Mods in Archive,Mehrere Mods im Archiv,Plusieurs
 dialog.multi_mod_message,"{0} contains {1} mods:{3}{2}{3}Install all of them?","{0} enthält {1} Mods:{3}{2}{3}Alle installieren?","{0} contient {1} mods :{3}{2}{3}Les installer tous ?",
 dialog.update_extra_mods_title,Additional Mods in Update,Weitere Mods im Update,Mods supplémentaires dans la mise à jour,
 dialog.update_extra_mods_message,"The update for {0} also contains {1} other mod(s):{3}{2}{3}Install them too?","Das Update für {0} enthält {1} weitere Mod(s):{3}{2}{3}Ebenfalls installieren?","La mise à jour de {0} contient aussi {1} autre(s) mod(s) :{3}{2}{3}Les installer également ?",
+dialog.missing_deps_title,Missing Dependencies,Fehlende Abhängigkeiten,Dépendances manquantes,
+dialog.missing_deps_message,"These mods were not activated because their dependencies could not be found:{1}{0}{1}The dependency may be misconfigured or use a different ID. Activate them anyway?","Diese Mods wurden nicht aktiviert, weil ihre Abhängigkeiten nicht gefunden wurden:{1}{0}{1}Die Abhängigkeit ist eventuell falsch konfiguriert oder hat eine andere ID. Trotzdem aktivieren?","Ces mods n'ont pas été activés car leurs dépendances sont introuvables :{1}{0}{1}La dépendance est peut-être mal configurée ou utilise un autre ID. Les activer quand même ?",
+dialog.button.activate_anyway,Activate Anyway,Trotzdem aktivieren,Activer quand même,
+dialog.button.keep_inactive,Keep Inactive,Inaktiv lassen,Laisser inactif,

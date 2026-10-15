@@ -498,23 +498,25 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             SetBusy(_localization.GetString("status.activating_group", checkedTargets.Count));
             int activated = 0;
-            var missingDeps = new List<string>();
+            var blocked = new List<(ModItemViewModel Mod, List<string> Missing)>();
             foreach (var target in checkedTargets)
             {
                 var missing = await AutoActivateDependenciesAsync(target);
                 if (missing.Count > 0)
                 {
-                    target.State = ModState.MissingDependency;
-                    target.HasMissingDependency = true;
-                    target.MissingDependencyIds = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
-                    target.RefreshDisplayRequirements();
-                    missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
+                    blocked.Add((target, missing));
                     continue;
                 }
                 var success = await _modInstall.ActivateModAsync(target.ModInfo, _settings.Settings.GamePath);
                 if (success) { target.SyncFromModel(); MoveToActive(target); activated++; }
             }
             ClearBusy();
+            var activatedAnyway = await HandleMissingDependenciesAsync(blocked);
+            activated += activatedAnyway.Count;
+            var missingDeps = blocked
+                .Where(b => !activatedAnyway.Contains(b.Mod))
+                .Select(b => $"{b.Mod.DisplayName} (missing: {string.Join(", ", b.Missing)})")
+                .ToList();
             StatusMessage = missingDeps.Count > 0
                 ? _localization.GetString("status.activated_simple_missing_deps", activated, checkedTargets.Count, string.Join("; ", missingDeps))
                 : _localization.GetString("status.activated_simple", activated, checkedTargets.Count);
@@ -530,23 +532,25 @@ public partial class MainWindowViewModel : ViewModelBase
             if (targets.Count == 0) return;
             SetBusy(_localization.GetString("status.activating_group", targets.Count));
             int activated = 0;
-            var missingDeps = new List<string>();
+            var blocked = new List<(ModItemViewModel Mod, List<string> Missing)>();
             foreach (var target in targets)
             {
                 var missing = await AutoActivateDependenciesAsync(target);
                 if (missing.Count > 0)
                 {
-                    target.State = ModState.MissingDependency;
-                    target.HasMissingDependency = true;
-                    target.MissingDependencyIds = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
-                    target.RefreshDisplayRequirements();
-                    missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
+                    blocked.Add((target, missing));
                     continue;
                 }
                 var success = await _modInstall.ActivateModAsync(target.ModInfo, _settings.Settings.GamePath);
                 if (success) { target.SyncFromModel(); MoveToActive(target); activated++; }
             }
             ClearBusy();
+            var activatedAnyway = await HandleMissingDependenciesAsync(blocked);
+            activated += activatedAnyway.Count;
+            var missingDeps = blocked
+                .Where(b => !activatedAnyway.Contains(b.Mod))
+                .Select(b => $"{b.Mod.DisplayName} (missing: {string.Join(", ", b.Missing)})")
+                .ToList();
             StatusMessage = missingDeps.Count > 0
                 ? _localization.GetString("status.activated_simple_missing_deps", activated, targets.Count, string.Join("; ", missingDeps))
                 : _localization.GetString("status.activated_count", activated, targets.Count, group.Name);
@@ -565,11 +569,10 @@ public partial class MainWindowViewModel : ViewModelBase
         ClearBusy();
         if (trulyMissing.Count > 0)
         {
-            mod.State = ModState.MissingDependency;
-            mod.HasMissingDependency = true;
-            mod.MissingDependencyIds = new HashSet<string>(trulyMissing, StringComparer.OrdinalIgnoreCase);
-            mod.RefreshDisplayRequirements();
-            StatusMessage = _localization.GetString("status.missing_dependencies", displayName, string.Join(", ", trulyMissing));
+            var activatedAnyway = await HandleMissingDependenciesAsync([(mod, trulyMissing)]);
+            StatusMessage = activatedAnyway.Count > 0
+                ? _localization.GetString("status.activated", displayName)
+                : _localization.GetString("status.missing_dependencies", displayName, string.Join(", ", trulyMissing));
             return;
         }
 
@@ -872,6 +875,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // If dropping on the active panel, activate each new mod with dependency resolution
         if (activate && newIds.Count > 0)
         {
+            var blocked = new List<(ModItemViewModel Mod, List<string> Missing)>();
             foreach (var id in newIds)
             {
                 var installed = AvailableMods
@@ -881,18 +885,25 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 BusyMessage = _localization.GetString("status.resolving_dependencies", installed.DisplayName);
                 var missing = await AutoActivateDependenciesAsync(installed);
-                if (missing.Count == 0)
+                if (missing.Count > 0)
                 {
-                    var success = await _modInstall.ActivateModAsync(installed.ModInfo, _settings.Settings.GamePath);
-                    if (success)
-                    {
-                        installed.SyncFromModel();
-                        MoveToActive(installed);
-                        activatedNames.Add(installed.DisplayName);
-                    }
+                    blocked.Add((installed, missing));
+                    continue;
                 }
-                // If dependencies are missing, mod stays in Available
+
+                var success = await _modInstall.ActivateModAsync(installed.ModInfo, _settings.Settings.GamePath);
+                if (success)
+                {
+                    installed.SyncFromModel();
+                    MoveToActive(installed);
+                    activatedNames.Add(installed.DisplayName);
+                }
             }
+
+            ClearBusy();
+            // Mods the user keeps inactive stay in Available
+            var activatedAnyway = await HandleMissingDependenciesAsync(blocked);
+            activatedNames.AddRange(activatedAnyway.Select(m => m.DisplayName));
         }
 
         ClearBusy();
@@ -972,6 +983,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
+            var blocked = new List<(ModItemViewModel Mod, List<string> Missing)>();
             foreach (var target in mods.ToList())
             {
                 if (target.IsActive) continue;
@@ -979,17 +991,20 @@ public partial class MainWindowViewModel : ViewModelBase
                 var missing = await AutoActivateDependenciesAsync(target);
                 if (missing.Count > 0)
                 {
-                    target.State = ModState.MissingDependency;
-                    target.HasMissingDependency = true;
-                    target.MissingDependencyIds = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
-                    target.RefreshDisplayRequirements();
-                    missingDeps.Add($"{target.DisplayName} (missing: {string.Join(", ", missing)})");
+                    blocked.Add((target, missing));
                     continue;
                 }
 
                 var success = await _modInstall.ActivateModAsync(target.ModInfo, _settings.Settings.GamePath);
                 if (success) { target.SyncFromModel(); MoveToActive(target); activated++; }
             }
+
+            ClearBusy();
+            var activatedAnyway = await HandleMissingDependenciesAsync(blocked);
+            activated += activatedAnyway.Count;
+            missingDeps.AddRange(blocked
+                .Where(b => !activatedAnyway.Contains(b.Mod))
+                .Select(b => $"{b.Mod.DisplayName} (missing: {string.Join(", ", b.Missing)})"));
         }
         catch (Exception ex)
         {
@@ -2048,6 +2063,48 @@ public partial class MainWindowViewModel : ViewModelBase
         ActiveMods.Remove(vm);
         AvailableMods.Add(vm);
         ApplyFilters();
+    }
+
+    /// <summary>
+    /// Shows which dependencies of the <paramref name="blocked"/> mods could not be found and
+    /// lets the user activate them anyway. Returns the mods activated.
+    /// </summary>
+    private async Task<List<ModItemViewModel>> HandleMissingDependenciesAsync(
+        IReadOnlyList<(ModItemViewModel Mod, List<string> Missing)> blocked)
+    {
+        var activated = new List<ModItemViewModel>();
+        if (blocked.Count == 0 || _settings.Settings.GamePath == null) return activated;
+
+        foreach (var (mod, missing) in blocked)
+        {
+            mod.State = ModState.MissingDependency;
+            mod.HasMissingDependency = true;
+            mod.MissingDependencyIds = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
+            mod.RefreshDisplayRequirements();
+        }
+
+        var separator = Environment.NewLine + Environment.NewLine;
+        var list = string.Join(Environment.NewLine,
+            blocked.Select(b => $"• {b.Mod.DisplayName}: {string.Join(", ", b.Missing)}"));
+        var activateAnyway = await _dialogService.ConfirmAsync(
+            _localization.GetString("dialog.missing_deps_title"),
+            _localization.GetString("dialog.missing_deps_message", list, separator),
+            _localization.GetString("dialog.button.activate_anyway"),
+            _localization.GetString("dialog.button.keep_inactive"));
+        if (!activateAnyway) return activated;
+
+        foreach (var (mod, _) in blocked)
+        {
+            var displayName = mod.DisplayName;
+            if (await _modInstall.ActivateModAsync(mod.ModInfo, _settings.Settings.GamePath))
+            {
+                mod.SyncFromModel();
+                MoveToActive(mod);
+                activated.Add(mod);
+                _logger.LogInformation("Activated {Mod} despite missing dependencies", displayName);
+            }
+        }
+        return activated;
     }
 
     /// <summary>
