@@ -774,14 +774,24 @@ public partial class MainWindowViewModel : ViewModelBase
         // ── Regular mod archive install (one or multiple) ─────────────────
         var installedNames = new List<string>();
         var failedCount = 0;
+        var declinedCount = 0;
 
         foreach (var zipPath in zipPaths)
         {
             SetBusy(_localization.GetString("busy.installing_mod", Path.GetFileName(zipPath)));
-            var mod = await _modInstall.InstallFromArchiveAsync(
-                zipPath, _settings.Settings.GamePath, _settings.Settings.StoragePath);
-            if (mod != null)
-                installedNames.Add(mod.EffectiveDisplayName);
+            var declined = false;
+            var mods = await _modInstall.InstallFromArchiveAsync(
+                zipPath, _settings.Settings.GamePath, _settings.Settings.StoragePath,
+                confirmMultiple: async m =>
+                {
+                    var ok = await ConfirmMultipleModsAsync(zipPath, m);
+                    declined = !ok;
+                    return ok;
+                });
+            if (mods.Count > 0)
+                installedNames.AddRange(mods.Select(m => m.EffectiveDisplayName));
+            else if (declined)
+                declinedCount++;
             else
                 failedCount++;
         }
@@ -789,16 +799,19 @@ public partial class MainWindowViewModel : ViewModelBase
         await RefreshModsAsync();
         ClearBusy();
 
-        if (zipPaths.Count == 1)
+        // A declined multi-mod archive is not a failure; nothing to report for it.
+        if (installedNames.Count == 0 && failedCount == 0) return;
+
+        if (zipPaths.Count - declinedCount == 1)
         {
             StatusMessage = installedNames.Count > 0
-                ? _localization.GetString("status.install_success", installedNames[0])
+                ? _localization.GetString("status.install_success", string.Join(", ", installedNames))
                 : _localization.GetString("status.install_failed");
         }
         else
         {
             StatusMessage = _localization.GetString("status.install_multi_result",
-                installedNames.Count, zipPaths.Count, failedCount);
+                installedNames.Count, installedNames.Count + failedCount, failedCount);
         }
     }
 
@@ -814,6 +827,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var installedNames = new List<string>();
         var activatedNames = new List<string>();
         var failedCount = 0;
+        var declinedCount = 0;
 
         // Mods already installed are updated in place and keep their side;
         // only new mods follow the panel they were dropped on.
@@ -827,18 +841,29 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var path in archivePaths)
         {
             SetBusy(_localization.GetString("busy.installing_mod", Path.GetFileName(path)));
-            var mod = await _modInstall.InstallFromArchiveAsync(
-                path, _settings.Settings.GamePath, _settings.Settings.StoragePath, activate: false);
+            var declined = false;
+            var mods = await _modInstall.InstallFromArchiveAsync(
+                path, _settings.Settings.GamePath, _settings.Settings.StoragePath, activate: false,
+                confirmMultiple: async m =>
+                {
+                    var ok = await ConfirmMultipleModsAsync(path, m);
+                    declined = !ok;
+                    return ok;
+                });
 
-            if (mod == null)
+            if (mods.Count == 0)
             {
-                failedCount++;
+                if (declined) declinedCount++;
+                else failedCount++;
                 continue;
             }
 
-            installedNames.Add(mod.EffectiveDisplayName);
-            if (!knownIds.Contains(mod.Id))
-                newIds.Add(mod.Id);
+            foreach (var mod in mods)
+            {
+                installedNames.Add(mod.EffectiveDisplayName);
+                if (!knownIds.Contains(mod.Id))
+                    newIds.Add(mod.Id);
+            }
         }
 
         // Refresh so newly installed mods appear in the lists
@@ -872,17 +897,20 @@ public partial class MainWindowViewModel : ViewModelBase
 
         ClearBusy();
 
+        // A declined multi-mod archive is not a failure; nothing to report for it.
+        if (installedNames.Count == 0 && failedCount == 0) return;
+
         // Build status message
-        if (archivePaths.Count == 1)
+        if (archivePaths.Count - declinedCount == 1)
         {
             if (installedNames.Count > 0)
             {
                 if (activate && activatedNames.Count > 0)
-                    StatusMessage = _localization.GetString("status.activated", activatedNames[0]);
+                    StatusMessage = _localization.GetString("status.activated", string.Join(", ", activatedNames));
                 else if (activate)
-                    StatusMessage = _localization.GetString("status.install_success", installedNames[0]);
+                    StatusMessage = _localization.GetString("status.install_success", string.Join(", ", installedNames));
                 else
-                    StatusMessage = _localization.GetString("status.install_success", installedNames[0]);
+                    StatusMessage = _localization.GetString("status.install_success", string.Join(", ", installedNames));
             }
             else
             {
@@ -900,6 +928,32 @@ public partial class MainWindowViewModel : ViewModelBase
                 parts.Add($"{failedCount} failed");
             StatusMessage = string.Join(", ", parts);
         }
+    }
+
+    /// <summary>
+    /// Asks before installing an archive that bundles several mods (#44).
+    /// </summary>
+    private Task<bool> ConfirmMultipleModsAsync(string archivePath, IReadOnlyList<ModInfo> mods)
+    {
+        var separator = Environment.NewLine + Environment.NewLine;
+        var list = string.Join(Environment.NewLine, mods.Select(m => "• " + m.EffectiveDisplayName));
+        return _dialogService.ConfirmAsync(
+            _localization.GetString("dialog.multi_mod_title"),
+            _localization.GetString("dialog.multi_mod_message",
+                Path.GetFileName(archivePath), mods.Count, list, separator));
+    }
+
+    /// <summary>
+    /// Asks before installing the other mods bundled in an update's zip (#44).
+    /// </summary>
+    private Task<bool> ConfirmExtraModsAsync(string displayName, IReadOnlyList<ModInfo> mods)
+    {
+        var separator = Environment.NewLine + Environment.NewLine;
+        var list = string.Join(Environment.NewLine, mods.Select(m => "• " + m.EffectiveDisplayName));
+        return _dialogService.ConfirmAsync(
+            _localization.GetString("dialog.update_extra_mods_title"),
+            _localization.GetString("dialog.update_extra_mods_message",
+                displayName, mods.Count, list, separator));
     }
 
     /// <summary>
@@ -1071,7 +1125,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 updateInfo.DownloadUrl, _settings.Settings.GamePath, _settings.Settings.StoragePath,
                 progress);
 
-            if (result == null)
+            if (result.Count == 0)
             {
                 ClearBusy();
                 StatusMessage = _localization.GetString("status.companion_install_failed");
@@ -1205,7 +1259,8 @@ public partial class MainWindowViewModel : ViewModelBase
         var progress = new Progress<double>(p =>
             BusyMessage = _localization.GetString("busy.update_progress", displayName, p));
         var success = await _modInstall.UpdateModAsync(
-            selectedVm.ModInfo, update, _settings.Settings.GamePath, _settings.Settings.StoragePath, progress);
+            selectedVm.ModInfo, update, _settings.Settings.GamePath, _settings.Settings.StoragePath, progress,
+            m => ConfirmExtraModsAsync(displayName, m));
         ClearBusy();
 
         if (success)
@@ -1249,7 +1304,8 @@ public partial class MainWindowViewModel : ViewModelBase
             var progress = new Progress<double>(p =>
                 BusyMessage = _localization.GetString("busy.update_multiple", modName, p, updated + 1, modsWithUpdates.Count));
             var success = await _modInstall.UpdateModAsync(
-                mod.ModInfo, mod.ModInfo.PendingUpdate!, _settings.Settings.GamePath!, _settings.Settings.StoragePath, progress);
+                mod.ModInfo, mod.ModInfo.PendingUpdate!, _settings.Settings.GamePath!, _settings.Settings.StoragePath, progress,
+                m => ConfirmExtraModsAsync(modName, m));
             if (success)
             {
                 mod.ModInfo.PendingUpdate = null;
@@ -1445,7 +1501,7 @@ public partial class MainWindowViewModel : ViewModelBase
                             var result = await _modInstall.DownloadAndInstallFromUrlAsync(
                                 updateInfo.DownloadUrl, _settings.Settings.GamePath, _settings.Settings.StoragePath,
                                 progress, downloadCts.Token);
-                            if (result != null) downloaded++;
+                            if (result.Count > 0) downloaded++;
                             else failedEntries.Add((entry.ModId, entry.HomePageUrl));
                         }
                         else
@@ -1577,7 +1633,7 @@ public partial class MainWindowViewModel : ViewModelBase
                                 var ok = await _modInstall.UpdateModAsync(
                                     currentMod, updateInfo,
                                     _settings.Settings.GamePath, _settings.Settings.StoragePath,
-                                    progress);
+                                    progress, m => ConfirmExtraModsAsync(entry.ModId, m));
                                 if (ok) reDone++;
                                 else reFailedEntries.Add((entry.ModId, entry.HomePageUrl));
                             }
