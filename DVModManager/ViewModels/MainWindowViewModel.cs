@@ -815,7 +815,15 @@ public partial class MainWindowViewModel : ViewModelBase
         var activatedNames = new List<string>();
         var failedCount = 0;
 
-        // Install all archives first (always install to available/inactive)
+        // Mods already installed are updated in place and keep their side;
+        // only new mods follow the panel they were dropped on.
+        var knownIds = ActiveMods.Concat(AvailableMods)
+            .Where(m => !m.IsMissing)
+            .Select(m => m.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var newIds = new List<string>();
+
+        // Install all archives first (new mods go to available/inactive)
         foreach (var path in archivePaths)
         {
             SetBusy(_localization.GetString("busy.installing_mod", Path.GetFileName(path)));
@@ -829,19 +837,20 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             installedNames.Add(mod.EffectiveDisplayName);
+            if (!knownIds.Contains(mod.Id))
+                newIds.Add(mod.Id);
         }
 
         // Refresh so newly installed mods appear in the lists
         await RefreshModsAsync();
 
-        // If dropping on the active panel, activate each installed mod with dependency resolution
-        if (activate && installedNames.Count > 0)
+        // If dropping on the active panel, activate each new mod with dependency resolution
+        if (activate && newIds.Count > 0)
         {
-            foreach (var name in installedNames.ToList())
+            foreach (var id in newIds)
             {
-                // Find by matching the name of mods that were just installed
                 var installed = AvailableMods
-                    .FirstOrDefault(m => installedNames.Contains(m.DisplayName)
+                    .FirstOrDefault(m => string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)
                         && !m.IsActive);
                 if (installed == null) continue;
 

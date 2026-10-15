@@ -170,9 +170,9 @@ public class ModInstallService : IModInstallService
                 return null;
             }
 
-            var targetDir = activate
-                ? PathSafety.SafeCombine(Path.Combine(gamePath, "Mods"), modInfo.Id)
-                : PathSafety.SafeCombine(Path.Combine(gamePath, "Mods.inactive"), modInfo.Id);
+            // An already installed mod is updated in place, whichever side it is on.
+            (var targetDir, activate) = await Task.Run(
+                () => ResolveInstallTarget(gamePath, modInfo.Id, activate), ct);
 
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
 
@@ -293,9 +293,9 @@ public class ModInstallService : IModInstallService
                 return null;
             }
 
-            var targetDir = activate
-                ? PathSafety.SafeCombine(Path.Combine(gamePath, "Mods"),          modInfo.Id)
-                : PathSafety.SafeCombine(Path.Combine(gamePath, "Mods.inactive"), modInfo.Id);
+            // An already installed mod is updated in place, whichever side it is on.
+            (var targetDir, activate) = await Task.Run(
+                () => ResolveInstallTarget(gamePath, modInfo.Id, activate), ct);
 
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
 
@@ -830,6 +830,25 @@ public class ModInstallService : IModInstallService
     }
 
     /// <summary>
+    /// Returns the existing folder of an installed mod (in <c>Mods/</c> first, then
+    /// <c>Mods.inactive/</c>) with its side, so reinstalls update it in place instead of
+    /// creating a second copy. Falls back to <c>{Id}</c> on the requested side.
+    /// </summary>
+    private (string TargetDir, bool IsActive) ResolveInstallTarget(string gamePath, string modId, bool activate)
+    {
+        var activeRoot   = Path.Combine(gamePath, "Mods");
+        var inactiveRoot = Path.Combine(gamePath, "Mods.inactive");
+
+        var existing = FindModFolderByModId(activeRoot, modId);
+        if (existing != null) return (existing, true);
+
+        existing = FindModFolderByModId(inactiveRoot, modId);
+        if (existing != null) return (existing, false);
+
+        return (PathSafety.SafeCombine(activate ? activeRoot : inactiveRoot, modId), activate);
+    }
+
+    /// <summary>
     /// Finds a mod's folder under <paramref name="root"/> by folder name (fast path)
     /// or by the <c>Id</c> field of its Info.json. Comparison is case-insensitive.
     /// </summary>
@@ -849,6 +868,7 @@ public class ModInstallService : IModInstallService
         // Slow path: match the Id declared in Info.json
         foreach (var dir in dirs)
         {
+            if (IsInstallerWorkDir(dir)) continue;
             var infoPath = InfoJsonLocator.Locate(dir);
             if (infoPath == null) continue;
             try
@@ -865,6 +885,20 @@ public class ModInstallService : IModInstallService
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Matches the installer's intermediate folders (same set ModDiscoveryService skips)
+    /// plus preserved <c>*.conflict-*</c> folders, which never count as the live install.
+    /// </summary>
+    private static bool IsInstallerWorkDir(string dir)
+    {
+        var name = Path.GetFileName(dir);
+        return name.EndsWith(".staging", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".backup", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".update_staging", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".update_backup", StringComparison.OrdinalIgnoreCase)
+            || name.Contains(".conflict-", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? FindModRoot(string extractedDir)

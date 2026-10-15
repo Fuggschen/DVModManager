@@ -354,6 +354,87 @@ public class ModInstallServiceTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task InstallFromArchiveAsync_UpdatesExistingModInPlaceRegardlessOfRequestedSide(
+        bool existingActive, bool requestActivate)
+    {
+        var tempGamePath = Path.Combine(Path.GetTempPath(), "Game_" + Guid.NewGuid());
+        var tempStoragePath = Path.Combine(Path.GetTempPath(), "Storage_" + Guid.NewGuid());
+        var tempZip = Path.Combine(Path.GetTempPath(), "TestMod_" + Guid.NewGuid() + ".zip");
+        var tempSourceDir = Path.Combine(Path.GetTempPath(), "Source_" + Guid.NewGuid());
+        var modsDir = Path.Combine(tempGamePath, "Mods");
+        var inactiveDir = Path.Combine(tempGamePath, "Mods.inactive");
+        // Folder name differs from the Id to cover lookup via Info.json
+        var liveDir = Path.Combine(existingActive ? modsDir : inactiveDir, "Installed Mod Folder");
+
+        Directory.CreateDirectory(liveDir);
+        File.WriteAllText(Path.Combine(liveDir, "Info.json"),
+            """{"Id": "InstalledMod", "DisplayName": "Installed Mod", "Version": "1.0.0"}""");
+        File.WriteAllText(Path.Combine(liveDir, "InstalledMod.dll"), "old-dll");
+
+        Directory.CreateDirectory(tempSourceDir);
+        File.WriteAllText(Path.Combine(tempSourceDir, "Info.json"),
+            """{"Id": "InstalledMod", "DisplayName": "Installed Mod", "Version": "1.0.0"}""");
+        File.WriteAllText(Path.Combine(tempSourceDir, "InstalledMod.dll"), "new-dll");
+        ZipFile.CreateFromDirectory(tempSourceDir, tempZip);
+
+        try
+        {
+            var installedMod = await _service.InstallFromArchiveAsync(
+                tempZip, tempGamePath, tempStoragePath, activate: requestActivate);
+
+            Assert.NotNull(installedMod);
+            Assert.Equal(liveDir, installedMod.FolderPath);
+            Assert.Equal(existingActive, installedMod.IsActive);
+            Assert.Equal("new-dll", File.ReadAllText(Path.Combine(liveDir, "InstalledMod.dll")));
+            Assert.False(Directory.Exists(Path.Combine(modsDir, "InstalledMod")));
+            Assert.False(Directory.Exists(Path.Combine(inactiveDir, "InstalledMod")));
+        }
+        finally
+        {
+            if (File.Exists(tempZip)) File.Delete(tempZip);
+            if (Directory.Exists(tempSourceDir)) Directory.Delete(tempSourceDir, true);
+            if (Directory.Exists(tempGamePath)) Directory.Delete(tempGamePath, true);
+            if (Directory.Exists(tempStoragePath)) Directory.Delete(tempStoragePath, true);
+        }
+    }
+
+    [Fact]
+    public async Task InstallFromArchiveAsync_NewModRespectsRequestedSide()
+    {
+        var tempGamePath = Path.Combine(Path.GetTempPath(), "Game_" + Guid.NewGuid());
+        var tempStoragePath = Path.Combine(Path.GetTempPath(), "Storage_" + Guid.NewGuid());
+        var tempZip = Path.Combine(Path.GetTempPath(), "TestMod_" + Guid.NewGuid() + ".zip");
+        var tempSourceDir = Path.Combine(Path.GetTempPath(), "Source_" + Guid.NewGuid());
+
+        Directory.CreateDirectory(tempSourceDir);
+        File.WriteAllText(Path.Combine(tempSourceDir, "Info.json"),
+            """{"Id": "NewMod", "DisplayName": "New Mod", "Version": "1.0.0"}""");
+        ZipFile.CreateFromDirectory(tempSourceDir, tempZip);
+
+        try
+        {
+            var installedMod = await _service.InstallFromArchiveAsync(
+                tempZip, tempGamePath, tempStoragePath, activate: false);
+
+            Assert.NotNull(installedMod);
+            Assert.False(installedMod.IsActive);
+            Assert.True(Directory.Exists(Path.Combine(tempGamePath, "Mods.inactive", "NewMod")));
+            Assert.False(Directory.Exists(Path.Combine(tempGamePath, "Mods", "NewMod")));
+        }
+        finally
+        {
+            if (File.Exists(tempZip)) File.Delete(tempZip);
+            if (Directory.Exists(tempSourceDir)) Directory.Delete(tempSourceDir, true);
+            if (Directory.Exists(tempGamePath)) Directory.Delete(tempGamePath, true);
+            if (Directory.Exists(tempStoragePath)) Directory.Delete(tempStoragePath, true);
+        }
+    }
+
     [Fact]
     public async Task RollbackToVersionAsync_PreservesModGeneratedFiles()
     {
