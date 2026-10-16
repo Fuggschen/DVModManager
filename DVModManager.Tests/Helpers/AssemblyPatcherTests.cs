@@ -144,4 +144,88 @@ public class AssemblyPatcherTests : IDisposable
 
         Assert.True(_patcher.IsPatched(asm));
     }
+
+    [Fact]
+    public void Inject_MscorlibTarget_ReferencesOnlyMscorlib()
+    {
+        // Unity/Mono assemblies target mscorlib; the starter must not drag in
+        // DVMM's own runtime (System.Private.CoreLib / System.Runtime / System.Console).
+        var asm = CreateMscorlibEntryAssembly();
+
+        Assert.True(_patcher.Inject(asm, "[Dummy.dll]Dummy.Entry.cctor:After"));
+
+        using var module = ModuleDefMD.Load(File.ReadAllBytes(asm));
+        Assert.Equal(["mscorlib"], module.GetAssemblyRefs().Select(a => a.Name.String).ToArray());
+    }
+
+    [Fact]
+    public void Inject_RepairsStarterThatReferencesForeignCorlib()
+    {
+        var asm = CreateMscorlibEntryAssembly();
+        WriteBrokenStarter(asm);
+        Assert.Contains(ReadAssemblyRefs(asm), n => n == "System.Private.CoreLib");
+
+        Assert.True(_patcher.Inject(asm, "[Dummy.dll]Dummy.Entry.cctor:After"));
+
+        Assert.Equal(["mscorlib"], ReadAssemblyRefs(asm));
+        using var module = ModuleDefMD.Load(File.ReadAllBytes(asm));
+        Assert.Single(module.Types, t => t.Name == UmmStarterEmitter.TypeName);
+        var cctor = module.Types.Single(t => t.FullName == "Dummy.Entry").Methods.Single(m => m.Name == ".cctor");
+        Assert.Single(cctor.Body.Instructions, i => i.OpCode == OpCodes.Call);
+    }
+
+    private string CreateMscorlibEntryAssembly()
+    {
+        var module = new ModuleDefUser("Dummy.dll", Guid.NewGuid(), AssemblyRefUser.CreateMscorlibReferenceCLR40());
+        new AssemblyDefUser("Dummy", new Version(1, 0, 0, 0)).Modules.Add(module);
+
+        var type = new TypeDefUser("Dummy", "Entry", module.CorLibTypes.Object.TypeDefOrRef)
+        {
+            Attributes = dnlib.DotNet.TypeAttributes.Public | dnlib.DotNet.TypeAttributes.BeforeFieldInit
+        };
+        var cctor = new MethodDefUser(".cctor", MethodSig.CreateStatic(module.CorLibTypes.Void),
+            dnlib.DotNet.MethodImplAttributes.IL | dnlib.DotNet.MethodImplAttributes.Managed,
+            dnlib.DotNet.MethodAttributes.Private | dnlib.DotNet.MethodAttributes.Static
+            | dnlib.DotNet.MethodAttributes.HideBySig | dnlib.DotNet.MethodAttributes.SpecialName
+            | dnlib.DotNet.MethodAttributes.RTSpecialName);
+        cctor.Body = new CilBody();
+        cctor.Body.Instructions.Add(OpCodes.Ret.ToInstruction());
+        type.Methods.Add(cctor);
+        module.Types.Add(type);
+
+        var path = Path.Combine(_workDir, "Dummy.dll");
+        module.Write(path);
+        return path;
+    }
+
+    /// <summary>Mimics the old emitter: a starter whose IL is imported from the host runtime.</summary>
+    private static void WriteBrokenStarter(string asm)
+    {
+        var module = ModuleDefMD.Load(File.ReadAllBytes(asm));
+        var importer = new Importer(module);
+        var starter = new TypeDefUser(UmmStarterEmitter.NamespaceName, UmmStarterEmitter.TypeName,
+            module.CorLibTypes.Object.TypeDefOrRef);
+        var start = new MethodDefUser(UmmStarterEmitter.MethodName, MethodSig.CreateStatic(module.CorLibTypes.Void),
+            dnlib.DotNet.MethodImplAttributes.IL | dnlib.DotNet.MethodImplAttributes.Managed,
+            dnlib.DotNet.MethodAttributes.Public | dnlib.DotNet.MethodAttributes.Static);
+        start.Body = new CilBody();
+        start.Body.Instructions.Add(OpCodes.Call.ToInstruction(importer.Import(
+            typeof(System.Reflection.Assembly).GetMethod(nameof(System.Reflection.Assembly.GetExecutingAssembly))!)));
+        start.Body.Instructions.Add(OpCodes.Pop.ToInstruction());
+        start.Body.Instructions.Add(OpCodes.Ret.ToInstruction());
+        starter.Methods.Add(start);
+        module.Types.Add(starter);
+
+        var cctor = module.Types.Single(t => t.FullName == "Dummy.Entry").Methods.Single(m => m.Name == ".cctor");
+        cctor.Body.Instructions.Insert(0, OpCodes.Call.ToInstruction(start));
+        module.Write(asm + ".tmp");
+        module.Dispose();
+        File.Move(asm + ".tmp", asm, overwrite: true);
+    }
+
+    private static string[] ReadAssemblyRefs(string asm)
+    {
+        using var module = ModuleDefMD.Load(File.ReadAllBytes(asm));
+        return module.GetAssemblyRefs().Select(a => a.Name.String).ToArray();
+    }
 }

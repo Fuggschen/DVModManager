@@ -134,45 +134,70 @@ public class ModInstallService : IModInstallService
 
     // ── Install: extract archive → Mods/ or Mods.inactive/ ───────────────────
 
-    public async Task<ModInfo?> InstallFromArchiveAsync(
+    public async Task<IReadOnlyList<ModInfo>> InstallFromArchiveAsync(
         string archivePath, string gamePath, string storagePath,
-        bool activate = true, CancellationToken ct = default)
+        bool activate = true, Func<IReadOnlyList<ModInfo>, Task<bool>>? confirmMultiple = null,
+        CancellationToken ct = default)
     {
-        // Extract to a temp dir first to discover the mod id; always cleaned up in finally (C4)
+        // Extract to a temp dir first to discover the mod ids; always cleaned up in finally (C4)
         var tempDir = Path.Combine(Path.GetTempPath(), "dvmm_" + Guid.NewGuid());
         try
         {
             await Task.Run(() => SafeExtractToDirectory(archivePath, tempDir), ct);
 
-            // Determine the mod root: either the extracted folder itself or a single subdirectory
-            var modRoot = FindModRoot(tempDir);
-            if (modRoot == null)
+            // An archive may bundle several mods, one per top-level folder (#44)
+            var staged = await ReadStagedModsAsync(tempDir, archivePath, ct);
+            if (staged.Count == 0)
             {
-                _logger.LogError("No Info.json found in archive {Archive}", archivePath);
-                return null;
+                _logger.LogError("No installable Info.json found in archive {Archive}", archivePath);
+                return [];
             }
 
-            var infoPath = InfoJsonLocator.Locate(modRoot);
-            if (infoPath == null)
+            if (staged.Count > 1 && confirmMultiple != null
+                && !await confirmMultiple(staged.Select(m => m.Info).ToList()))
             {
-                _logger.LogError("No Info.json found in archive {Archive}", archivePath);
-                return null;
-            }
-            var json = await File.ReadAllTextAsync(infoPath, ct);
-            var modInfo = JsonSerializer.Deserialize<ModInfo>(json, JsonOptions);
-            if (modInfo == null) return null;
-
-            // Reject malicious/invalid Ids before deriving any filesystem path (C1)
-            if (!PathSafety.IsValidModId(modInfo.Id))
-            {
-                _logger.LogError(
-                    "Rejected archive {Archive}: unsafe or empty mod Id '{Id}'", archivePath, modInfo.Id);
-                return null;
+                _logger.LogInformation(
+                    "Install of {Archive} declined by user ({Count} mods)", archivePath, staged.Count);
+                return [];
             }
 
-            var targetDir = activate
-                ? PathSafety.SafeCombine(Path.Combine(gamePath, "Mods"), modInfo.Id)
-                : PathSafety.SafeCombine(Path.Combine(gamePath, "Mods.inactive"), modInfo.Id);
+            var installed = new List<ModInfo>();
+            foreach (var entry in staged)
+            {
+                var modInfo = await InstallStagedModAsync(entry, gamePath, storagePath, activate, ct);
+                if (modInfo == null) continue;
+
+                CacheArchive(archivePath, storagePath, modInfo.Id);
+                installed.Add(modInfo);
+            }
+            return installed;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to install from archive {Archive}", archivePath);
+            return [];
+        }
+        finally
+        {
+            // Never leak extraction trees under the temp dir, even on failure (C4)
+            TryDeleteDirectory(tempDir);
+        }
+    }
+
+    /// <summary>
+    /// Moves one extracted mod folder into <c>Mods/</c> or <c>Mods.inactive/</c>,
+    /// archiving and replacing an existing install. Returns null on failure.
+    /// </summary>
+    private async Task<ModInfo?> InstallStagedModAsync(
+        StagedMod staged, string gamePath, string storagePath, bool activate, CancellationToken ct)
+    {
+        var modRoot = staged.Root;
+        var modInfo = staged.Info;
+        try
+        {
+            // An already installed mod is updated in place, whichever side it is on.
+            (var targetDir, activate) = await Task.Run(
+                () => ResolveInstallTarget(gamePath, modInfo.Id, activate), ct);
 
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
 
@@ -245,24 +270,29 @@ public class ModInstallService : IModInstallService
             modInfo.IsActive = activate;
             modInfo.State = activate ? ModState.Active : ModState.Inactive;
 
-            // Copy archive to downloads cache
-            var downloadsDir = Path.Combine(storagePath, "downloads", modInfo.Id);
-            Directory.CreateDirectory(downloadsDir);
-            var destArchive = Path.Combine(downloadsDir, Path.GetFileName(archivePath));
-            if (!File.Exists(destArchive)) File.Copy(archivePath, destArchive);
-
             _logger.LogInformation("Installed mod {Id} v{Version}", modInfo.Id, modInfo.Version);
             return modInfo;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to install from archive {Archive}", archivePath);
+            _logger.LogError(ex, "Failed to install mod {Id} from {Folder}", modInfo.Id, modRoot);
             return null;
         }
-        finally
+    }
+
+    /// <summary>Copies the source archive to the downloads cache of a mod (non-fatal).</summary>
+    private void CacheArchive(string archivePath, string storagePath, string modId)
+    {
+        try
         {
-            // Never leak extraction trees under the temp dir, even on failure (C4)
-            TryDeleteDirectory(tempDir);
+            var downloadsDir = Path.Combine(storagePath, "downloads", modId);
+            Directory.CreateDirectory(downloadsDir);
+            var destArchive = Path.Combine(downloadsDir, Path.GetFileName(archivePath));
+            if (!File.Exists(destArchive)) File.Copy(archivePath, destArchive);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Caching archive {Archive} for {Id} failed (non-fatal)", archivePath, modId);
         }
     }
 
@@ -293,9 +323,9 @@ public class ModInstallService : IModInstallService
                 return null;
             }
 
-            var targetDir = activate
-                ? PathSafety.SafeCombine(Path.Combine(gamePath, "Mods"),          modInfo.Id)
-                : PathSafety.SafeCombine(Path.Combine(gamePath, "Mods.inactive"), modInfo.Id);
+            // An already installed mod is updated in place, whichever side it is on.
+            (var targetDir, activate) = await Task.Run(
+                () => ResolveInstallTarget(gamePath, modInfo.Id, activate), ct);
 
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
 
@@ -523,7 +553,8 @@ public class ModInstallService : IModInstallService
 
     public async Task<bool> UpdateModAsync(
         ModInfo mod, ModUpdateInfo update, string gamePath, string storagePath,
-        IProgress<double>? progress = null, CancellationToken ct = default)
+        IProgress<double>? progress = null, Func<IReadOnlyList<ModInfo>, Task<bool>>? confirmExtraMods = null,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(update.DownloadUrl))
         {
@@ -560,18 +591,19 @@ public class ModInstallService : IModInstallService
             } // fileStream closed & flushed here
 
             // 2. Validate that the zip actually contains the same mod before touching anything
-            var zipModId = await ReadModIdFromZipAsync(downloadPath, ct);
-            if (zipModId == null)
+            var zipModIds = await ReadModIdsFromZipAsync(downloadPath, ct);
+            if (zipModIds.Count == 0)
             {
                 _logger.LogError(
                     "Update aborted for {Id}: could not find Info.json in the downloaded zip", mod.Id);
                 File.Delete(downloadPath);
                 return false;
             }
-            if (!string.Equals(zipModId, mod.Id, StringComparison.OrdinalIgnoreCase))
+            if (!zipModIds.Contains(mod.Id, StringComparer.OrdinalIgnoreCase))
             {
                 _logger.LogError(
-                    "Update aborted for {Id}: zip contains mod '{ZipId}' — mod ID mismatch", mod.Id, zipModId);
+                    "Update aborted for {Id}: zip contains mod(s) '{ZipIds}' — mod ID mismatch",
+                    mod.Id, string.Join(", ", zipModIds));
                 File.Delete(downloadPath);
                 return false;
             }
@@ -597,14 +629,19 @@ public class ModInstallService : IModInstallService
                 return false;
             }
 
-            // Resolve the staged mod root (archives may wrap the mod in a folder)
-            var stagedRoot = FindModRoot(stagingDir);
-            if (stagedRoot == null)
+            // Resolve the staged mod root (archives may wrap the mod in a folder or bundle
+            // several mods); the other bundled mods are installed after the swap (#44).
+            var stagedMods = await ReadStagedModsAsync(stagingDir, downloadPath, ct);
+            var target = stagedMods.FirstOrDefault(m =>
+                string.Equals(m.Info.Id, mod.Id, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
             {
-                _logger.LogError("Update aborted for {Id}: no Info.json in downloaded zip", mod.Id);
+                _logger.LogError("Update aborted for {Id}: no matching Info.json in downloaded zip", mod.Id);
                 TryDeleteDirectory(stagingDir);
                 return false;
             }
+            var stagedRoot = target.Root;
+            var extraMods  = stagedMods.Where(m => m != target).ToList();
 
             // Runtime-generated files (e.g. UMM's Settings.xml) survive the update.
             if (Directory.Exists(livePath))
@@ -645,7 +682,6 @@ public class ModInstallService : IModInstallService
                     }
 
                     if (Directory.Exists(backupDir)) Directory.Delete(backupDir, true);
-                    if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true);
                 }, ct);
             }
             catch (Exception ex)
@@ -654,6 +690,33 @@ public class ModInstallService : IModInstallService
                 TryDeleteDirectory(stagingDir);
                 TryDeleteDirectory(backupDir);
                 return false;
+            }
+
+            // Install the other mods bundled in the same zip; their failure does not fail the update.
+            try
+            {
+                if (extraMods.Count > 0)
+                {
+                    if (confirmExtraMods == null
+                        || await confirmExtraMods(extraMods.Select(m => m.Info).ToList()))
+                    {
+                        foreach (var extra in extraMods)
+                        {
+                            if (await InstallStagedModAsync(extra, gamePath, storagePath, activate: false, ct) == null)
+                                _logger.LogWarning("Update of {Id}: bundled mod {Extra} failed to install",
+                                    mod.Id, extra.Info.Id);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Update of {Id}: user declined {Count} bundled mod(s)",
+                            mod.Id, extraMods.Count);
+                    }
+                }
+            }
+            finally
+            {
+                TryDeleteDirectory(stagingDir);
             }
 
             // 5. Clean up downloaded zip after successful install
@@ -671,7 +734,7 @@ public class ModInstallService : IModInstallService
 
     // ── Download and install from URL ──────────────────────────────────────────────
 
-    public async Task<ModInfo?> DownloadAndInstallFromUrlAsync(
+    public async Task<IReadOnlyList<ModInfo>> DownloadAndInstallFromUrlAsync(
         string downloadUrl, string gamePath, string storagePath,
         IProgress<double>? progress = null, CancellationToken ct = default)
     {
@@ -702,7 +765,7 @@ public class ModInstallService : IModInstallService
                 }
             }
 
-            var result = await InstallFromArchiveAsync(downloadPath, gamePath, storagePath, activate: false, ct);
+            var result = await InstallFromArchiveAsync(downloadPath, gamePath, storagePath, activate: false, ct: ct);
 
             try { File.Delete(downloadPath); } catch { /* best-effort cleanup */ }
 
@@ -711,7 +774,7 @@ public class ModInstallService : IModInstallService
         catch (Exception ex)
         {
             _logger.LogError(ex, "DownloadAndInstall failed for URL {Url}", downloadUrl);
-            return null;
+            return [];
         }
     }
 
@@ -830,6 +893,25 @@ public class ModInstallService : IModInstallService
     }
 
     /// <summary>
+    /// Returns the existing folder of an installed mod (in <c>Mods/</c> first, then
+    /// <c>Mods.inactive/</c>) with its side, so reinstalls update it in place instead of
+    /// creating a second copy. Falls back to <c>{Id}</c> on the requested side.
+    /// </summary>
+    private (string TargetDir, bool IsActive) ResolveInstallTarget(string gamePath, string modId, bool activate)
+    {
+        var activeRoot   = Path.Combine(gamePath, "Mods");
+        var inactiveRoot = Path.Combine(gamePath, "Mods.inactive");
+
+        var existing = FindModFolderByModId(activeRoot, modId);
+        if (existing != null) return (existing, true);
+
+        existing = FindModFolderByModId(inactiveRoot, modId);
+        if (existing != null) return (existing, false);
+
+        return (PathSafety.SafeCombine(activate ? activeRoot : inactiveRoot, modId), activate);
+    }
+
+    /// <summary>
     /// Finds a mod's folder under <paramref name="root"/> by folder name (fast path)
     /// or by the <c>Id</c> field of its Info.json. Comparison is case-insensitive.
     /// </summary>
@@ -849,6 +931,7 @@ public class ModInstallService : IModInstallService
         // Slow path: match the Id declared in Info.json
         foreach (var dir in dirs)
         {
+            if (IsInstallerWorkDir(dir)) continue;
             var infoPath = InfoJsonLocator.Locate(dir);
             if (infoPath == null) continue;
             try
@@ -867,50 +950,115 @@ public class ModInstallService : IModInstallService
         return null;
     }
 
-    private static string? FindModRoot(string extractedDir)
+    /// <summary>
+    /// Matches the installer's intermediate folders (same set ModDiscoveryService skips)
+    /// plus preserved <c>*.conflict-*</c> folders, which never count as the live install.
+    /// </summary>
+    private static bool IsInstallerWorkDir(string dir)
+    {
+        var name = Path.GetFileName(dir);
+        return name.EndsWith(".staging", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".backup", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".update_staging", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".update_backup", StringComparison.OrdinalIgnoreCase)
+            || name.Contains(".conflict-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>An extracted mod folder and its parsed Info.json.</summary>
+    private sealed record StagedMod(string Root, ModInfo Info);
+
+    /// <summary>
+    /// Returns the mod folders of an extracted archive: the root itself when it holds
+    /// an Info.json, otherwise every top-level folder that holds one.
+    /// </summary>
+    private static List<string> FindModRoots(string extractedDir)
     {
         // Check if Info.json is directly in the extracted root
-        if (InfoJsonLocator.Locate(extractedDir) != null) return extractedDir;
+        if (InfoJsonLocator.Locate(extractedDir) != null) return [extractedDir];
 
-        // Check one level deep (common pattern: archive contains a single mod folder)
-        foreach (var subDir in Directory.GetDirectories(extractedDir))
-        {
-            if (InfoJsonLocator.Locate(subDir) != null) return subDir;
-        }
-        return null;
+        // Check one level deep (archive contains one or more mod folders)
+        return Directory.GetDirectories(extractedDir)
+            .Where(d => InfoJsonLocator.Locate(d) != null)
+            .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     /// <summary>
-    /// Opens a zip without fully extracting it and returns the mod Id from Info.json,
-    /// or null if Info.json is missing or the Id field is absent.
+    /// Parses the Info.json of every mod folder in <paramref name="extractedDir"/>.
+    /// Unreadable, unsafe or duplicate mods are logged and skipped.
     /// </summary>
-    private async Task<string?> ReadModIdFromZipAsync(string zipPath, CancellationToken ct)
+    private async Task<List<StagedMod>> ReadStagedModsAsync(
+        string extractedDir, string archivePath, CancellationToken ct)
     {
+        var result = new List<StagedMod>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var root in FindModRoots(extractedDir))
+        {
+            ModInfo? info;
+            try
+            {
+                var infoPath = InfoJsonLocator.Locate(root)!;
+                info = JsonSerializer.Deserialize<ModInfo>(
+                    await File.ReadAllTextAsync(infoPath, ct), JsonOptions);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Skipping {Folder} in {Archive}: unreadable Info.json", root, archivePath);
+                continue;
+            }
+            if (info == null) continue;
+
+            // Reject malicious/invalid Ids before deriving any filesystem path (C1)
+            if (!PathSafety.IsValidModId(info.Id))
+            {
+                _logger.LogError(
+                    "Rejected {Folder} in {Archive}: unsafe or empty mod Id '{Id}'", root, archivePath, info.Id);
+                continue;
+            }
+            if (!seen.Add(info.Id))
+            {
+                _logger.LogWarning("Skipping {Folder} in {Archive}: duplicate mod Id '{Id}'", root, archivePath, info.Id);
+                continue;
+            }
+
+            result.Add(new StagedMod(root, info));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Opens a zip without fully extracting it and returns the mod Ids of every Info.json
+    /// at the root or one directory deep. Empty if none is found or readable.
+    /// </summary>
+    private async Task<List<string>> ReadModIdsFromZipAsync(string zipPath, CancellationToken ct)
+    {
+        var ids = new List<string>();
         try
         {
             using var archive = ZipFile.OpenRead(zipPath);
 
             // Find Info.json at the root or one directory deep.
             // Count both '/' and '\' — Windows-made zips may use '\' separators (M8).
-            var entry = archive.Entries.FirstOrDefault(e =>
+            var entries = archive.Entries.Where(e =>
                 string.Equals(e.Name, "Info.json", StringComparison.OrdinalIgnoreCase)
                 && e.FullName.Count(c => c == '/' || c == '\\') <= 1);
 
-            if (entry == null) return null;
-
-            await using var stream = entry.Open();
-            using var reader = new StreamReader(stream);
-            var json = await reader.ReadToEndAsync(ct);
-            var doc = JsonSerializer.Deserialize<JsonElement>(json, JsonOptions);
-            if (doc.TryGetProperty("Id", out var idElem) || doc.TryGetProperty("id", out idElem))
-                return idElem.GetString();
-
-            return null;
+            foreach (var entry in entries)
+            {
+                await using var stream = entry.Open();
+                using var reader = new StreamReader(stream);
+                var json = await reader.ReadToEndAsync(ct);
+                var doc = JsonSerializer.Deserialize<JsonElement>(json, JsonOptions);
+                if ((doc.TryGetProperty("Id", out var idElem) || doc.TryGetProperty("id", out idElem))
+                    && idElem.GetString() is { Length: > 0 } id)
+                    ids.Add(id);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not read Info.json from zip {Path}", zipPath);
-            return null;
         }
+        return ids;
     }
 }

@@ -81,10 +81,19 @@ public class AssemblyPatcher
         {
             using var module = LoadModule(assemblyPath);
 
-            if (FindStarter(module) != null)
+            var existing = FindStarter(module);
+            if (existing != null)
             {
-                _logger.LogInformation("{Path} is already patched", assemblyPath);
-                return true;
+                if (!ReferencesForeignAssemblies(module, existing))
+                {
+                    _logger.LogInformation("{Path} is already patched", assemblyPath);
+                    return true;
+                }
+
+                // Older DVMM builds emitted a starter that referenced
+                // System.Private.CoreLib, which breaks the game under Mono.
+                _logger.LogWarning("{Path} carries a broken starter — re-patching", assemblyPath);
+                StripStarter(module, existing, className, methodName);
             }
 
             if (!TryFindMethod(module, className, methodName, out var target))
@@ -147,16 +156,8 @@ public class AssemblyPatcher
                 return true;
             }
 
-            var start = starter.Methods.FirstOrDefault(m => m.Name == UmmStarterEmitter.MethodName);
-            if (start != null && TryParseEntryPoint(entryPointSpec, out _, out var className, out var methodName, out _)
-                && TryFindMethod(module, className, methodName, out var target))
-            {
-                var call = target.Body.Instructions.FirstOrDefault(i =>
-                    i.OpCode == OpCodes.Call && i.Operand is IMethod m && m.Name == UmmStarterEmitter.MethodName);
-                if (call != null) target.Body.Instructions.Remove(call);
-            }
-
-            module.Types.Remove(starter);
+            TryParseEntryPoint(entryPointSpec, out _, out var className, out var methodName, out _);
+            StripStarter(module, starter, className, methodName);
             module.Write(assemblyPath);
             DeleteOriginal(assemblyPath);
             _logger.LogInformation("Unpatched {Path}", assemblyPath);
@@ -199,6 +200,37 @@ public class AssemblyPatcher
         {
             try { File.Delete(originalPath); } catch { /* best-effort */ }
         }
+    }
+
+    /// <summary>Removes the starter type and its call at the entry point (in memory only).</summary>
+    private static void StripStarter(ModuleDef module, TypeDef starter, string className, string methodName)
+    {
+        if (className.Length > 0 && TryFindMethod(module, className, methodName, out var target))
+        {
+            var call = target.Body.Instructions.FirstOrDefault(i =>
+                i.OpCode == OpCodes.Call && i.Operand is IMethod m && m.Name == UmmStarterEmitter.MethodName);
+            if (call != null) target.Body.Instructions.Remove(call);
+        }
+        module.Types.Remove(starter);
+    }
+
+    /// <summary>
+    /// True when the starter's IL points at any assembly other than the
+    /// module's own corlib (e.g. System.Private.CoreLib from DVMM's runtime).
+    /// </summary>
+    private static bool ReferencesForeignAssemblies(ModuleDef module, TypeDef starter)
+    {
+        var corlib = module.CorLibTypes.AssemblyRef.Name.String;
+        return starter.Methods
+            .Where(m => m.HasBody)
+            .SelectMany(m => m.Body.Instructions.Select(i => i.Operand switch
+                {
+                    IMethod method => method.DeclaringType,
+                    ITypeDefOrRef type => type,
+                    _ => null
+                })
+                .Concat(m.Body.ExceptionHandlers.Select(h => h.CatchType)))
+            .Any(t => t != null && t.DefinitionAssembly?.Name.String != corlib);
     }
 
     /// <summary>Loads from bytes so the file is never held open during Write.</summary>
