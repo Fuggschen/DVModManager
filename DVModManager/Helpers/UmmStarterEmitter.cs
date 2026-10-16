@@ -1,4 +1,3 @@
-using System.Reflection;
 using dnlib.DotNet;
 using dnlib.DotNet.Emit;
 using MethodAttributes = dnlib.DotNet.MethodAttributes;
@@ -22,14 +21,16 @@ public static class UmmStarterEmitter
     public const string TypeName = "UnityModManagerStarter";
     public const string MethodName = "Start";
 
+    // BindingFlags.Public (16) | BindingFlags.Static (8)
+    private const int BindingFlagsPublicStatic = 16 | 8;
+
     /// <summary>
     /// Creates the starter type as a member of <paramref name="module"/>
-    /// (references are imported against that module's corlib).
+    /// (all references point at that module's corlib).
     /// </summary>
     public static TypeDef CreateStarterType(ModuleDef module)
     {
         var corlib = module.CorLibTypes;
-        var importer = new Importer(module);
 
         var type = new TypeDefUser(NamespaceName, TypeName, corlib.Object.TypeDefOrRef)
         {
@@ -44,10 +45,27 @@ public static class UmmStarterEmitter
             MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.HideBySig);
         type.Methods.Add(start);
 
+        // Every reference is built by hand against the target module's own
+        // corlib (mscorlib on Unity/Mono). Importing System.Type/MethodInfo via
+        // dnlib's Importer would resolve them through DVMM's .NET runtime and
+        // reference System.Private.CoreLib, which Mono cannot load: the entry
+        // point's cctor then throws TypeInitializationException in-game.
+        var tAssembly = CorlibType(module, "System.Reflection", "Assembly");
+        var tPath = CorlibType(module, "System.IO", "Path");
+        var tType = CorlibType(module, "System", "Type");
+        var tMethodInfo = CorlibType(module, "System.Reflection", "MethodInfo");
+        var tMethodBase = CorlibType(module, "System.Reflection", "MethodBase");
+        var tBindingFlags = CorlibType(module, "System.Reflection", "BindingFlags");
+        var tConsole = CorlibType(module, "System", "Console");
+        var tException = CorlibType(module, "System", "Exception");
+
+        var sAssembly = new ClassSig(tAssembly);
+        var sString = corlib.String;
+        var sObject = corlib.Object;
+
         var body = new CilBody { InitLocals = true };
         start.Body = body;
-        var tException = importer.Import(typeof(Exception));
-        body.Variables.Add(new Local(tException.ToTypeSig())); // catch (Exception e)
+        body.Variables.Add(new Local(new ClassSig(tException))); // catch (Exception e)
 
         // void Start() {
         //   try {
@@ -58,26 +76,26 @@ public static class UmmStarterEmitter
         //     run.Invoke(null, new object[] { false });
         //   } catch (Exception e) { Console.WriteLine(e.ToString()); }
         // }
-        var mGetExecuting = importer.Import(
-            typeof(Assembly).GetMethod(nameof(Assembly.GetExecutingAssembly), Type.EmptyTypes));
-        var mGetLocation = importer.Import(
-            typeof(Assembly).GetProperty(nameof(Assembly.Location))!.GetGetMethod());
-        var mGetDirectoryName = importer.Import(
-            typeof(Path).GetMethod(nameof(Path.GetDirectoryName), new[] { typeof(string) })!);
-        var mCombine = importer.Import(
-            typeof(Path).GetMethod(nameof(Path.Combine), new[] { typeof(string), typeof(string) })!);
-        var mLoadFrom = importer.Import(
-            typeof(Assembly).GetMethod(nameof(Assembly.LoadFrom), new[] { typeof(string) })!);
-        var mGetType = importer.Import(
-            typeof(Assembly).GetMethod(nameof(Assembly.GetType), new[] { typeof(string) })!);
-        var mGetMethod = importer.Import(
-            typeof(Type).GetMethod(nameof(Type.GetMethod), new[] { typeof(string), typeof(BindingFlags) })!);
-        var mInvoke = importer.Import(
-            typeof(MethodBase).GetMethod(nameof(MethodBase.Invoke), new[] { typeof(object), typeof(object[]) })!);
-        var mWriteLine = importer.Import(
-            typeof(Console).GetMethod(nameof(Console.WriteLine), new[] { typeof(string) })!);
-        var mToString = importer.Import(
-            typeof(Exception).GetMethod(nameof(Exception.ToString), Type.EmptyTypes)!);
+        var mGetExecuting = new MemberRefUser(module, "GetExecutingAssembly",
+            MethodSig.CreateStatic(sAssembly), tAssembly);
+        var mGetLocation = new MemberRefUser(module, "get_Location",
+            MethodSig.CreateInstance(sString), tAssembly);
+        var mGetDirectoryName = new MemberRefUser(module, "GetDirectoryName",
+            MethodSig.CreateStatic(sString, sString), tPath);
+        var mCombine = new MemberRefUser(module, "Combine",
+            MethodSig.CreateStatic(sString, sString, sString), tPath);
+        var mLoadFrom = new MemberRefUser(module, "LoadFrom",
+            MethodSig.CreateStatic(sAssembly, sString), tAssembly);
+        var mGetType = new MemberRefUser(module, "GetType",
+            MethodSig.CreateInstance(new ClassSig(tType), sString), tAssembly);
+        var mGetMethod = new MemberRefUser(module, "GetMethod",
+            MethodSig.CreateInstance(new ClassSig(tMethodInfo), sString, new ValueTypeSig(tBindingFlags)), tType);
+        var mInvoke = new MemberRefUser(module, "Invoke",
+            MethodSig.CreateInstance(sObject, sObject, new SZArraySig(sObject)), tMethodBase);
+        var mWriteLine = new MemberRefUser(module, "WriteLine",
+            MethodSig.CreateStatic(corlib.Void, sString), tConsole);
+        var mToString = new MemberRefUser(module, "ToString",
+            MethodSig.CreateInstance(sString), tException);
 
         var il = body.Instructions;
 
@@ -94,7 +112,7 @@ public static class UmmStarterEmitter
         il.Add(OpCodes.Ldstr.ToInstruction("UnityModManagerNet.Injector"));
         il.Add(OpCodes.Callvirt.ToInstruction(mGetType));
         il.Add(OpCodes.Ldstr.ToInstruction("Run"));
-        il.Add(OpCodes.Ldc_I4.ToInstruction((int)(BindingFlags.Public | BindingFlags.Static)));
+        il.Add(OpCodes.Ldc_I4.ToInstruction(BindingFlagsPublicStatic));
         il.Add(OpCodes.Callvirt.ToInstruction(mGetMethod));
         il.Add(OpCodes.Ldnull.ToInstruction());
         il.Add(OpCodes.Ldc_I4_1.ToInstruction());
@@ -135,4 +153,7 @@ public static class UmmStarterEmitter
 
         return type;
     }
+
+    private static TypeRefUser CorlibType(ModuleDef module, string ns, string name) =>
+        new(module, ns, name, module.CorLibTypes.AssemblyRef);
 }
