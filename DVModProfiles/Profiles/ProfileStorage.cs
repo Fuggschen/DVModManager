@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text;
 using Steamworks;
 
@@ -56,6 +52,7 @@ public static class ProfileStorage
         try
         {
             var keys = from.ListKeys(PROFILE_PREFIX)
+                .Concat(HostProfiles.CopyKeys(from))
                 .Concat([ASSOCIATIONS_KEY])
                 .Distinct();
 

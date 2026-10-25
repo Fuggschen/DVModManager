@@ -1,5 +1,3 @@
-using System;
-using System.IO;
 using Newtonsoft.Json;
 using UnityModManagerNet;
 
@@ -44,8 +42,18 @@ public static class SettingsStore
         ProfileStorage.Backend.Delete(KeyFor(profileName));
 
     // Snapshots the live settings of every installed mod (excluding this one) against a profile
-    // name and persists them. First asks each mod to flush its settings via its OnSaveGUI hook.
+    // name and persists them.
     public static ProfileSettings Capture(string profileName)
+    {
+        ProfileSettings settings = Snapshot(profileName);
+        Save(settings);
+        Main.Logger.Log($"Captured {settings.Settings.Count} mod settings for profile '{profileName}'");
+        return settings;
+    }
+
+    // Snapshots the live settings of every installed mod (excluding this one) without persisting
+    // them. First asks each mod to flush its settings via its OnSaveGUI hook.
+    public static ProfileSettings Snapshot(string profileName)
     {
         var settings = new ProfileSettings { Name = profileName };
         string selfId = Main.ModEntry.Info.Id;
@@ -58,8 +66,6 @@ public static class SettingsStore
             }
         }
 
-        Save(settings);
-        Main.Logger.Log($"Captured {settings.Settings.Count} mod settings for profile '{profileName}'");
         return settings;
     }
 
@@ -83,7 +89,7 @@ public static class SettingsStore
         }
     }
 
-    private static string Sanitize(string name)
+    internal static string Sanitize(string name)
     {
         foreach (char c in Path.GetInvalidFileNameChars())
         {

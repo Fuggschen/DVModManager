@@ -1,5 +1,6 @@
 using System.Reflection;
 using HarmonyLib;
+using DVModProfiles.Multiplayer;
 using DVModProfiles.Profiles;
 using UnityEngine;
 using UnityModManagerNet;
@@ -26,9 +27,12 @@ public static class Main
             modEntry.OnGUI = OnGUI;
             modEntry.OnSaveGUI = OnSaveGUI;
 
+            BorrowedSettings.RecoverAfterExit();
+
             harmony = new Harmony(modEntry.Info.Id);
             harmony.PatchAll(Assembly.GetExecutingAssembly());
             SettingsAutoCapture.Init();
+            MultiplayerSupport.TryInit();
         }
         catch (Exception ex)
         {
@@ -53,6 +57,28 @@ public static class Main
         GUILayout.Label(managerDir == null
             ? "Mod manager storage not found — install DV Mod Manager to pick a profile for your saves."
             : $"Reading profiles from the mod manager at: {managerDir}");
+
+        Config.shareWithMultiplayerClients = GUILayout.Toggle(Config.shareWithMultiplayerClients,
+            "  Share my mod settings with the players who join multiplayer games I host");
+
+        List<HostProfilePreference> servers = [.. HostProfiles.All];
+        if (servers.Count == 0)
+        {
+            return;
+        }
+
+        GUILayout.Label("Host mod settings for multiplayer servers (also changeable from the server browser):");
+        foreach (HostProfilePreference server in servers)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"    {server.Label}: {HostProfiles.Describe(server.Server, server.Choice)}");
+            if (GUILayout.Button("Forget", GUILayout.ExpandWidth(false)))
+            {
+                HostProfiles.Forget(server.Server);
+            }
+
+            GUILayout.EndHorizontal();
+        }
     }
 
     private static void OnSaveGUI(UnityModManager.ModEntry modEntry) => Config.Save(modEntry);

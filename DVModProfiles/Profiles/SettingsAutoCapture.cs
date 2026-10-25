@@ -7,6 +7,9 @@ internal static class SettingsAutoCapture
 {
     private static string? loadedProfile;
 
+    // The profile of the save that's loaded, if it has one
+    public static string? LoadedProfile => loadedProfile;
+
     public static void TrackSession(string profileName) => loadedProfile = profileName;
 
     public static void ForgetSession() => loadedProfile = null;

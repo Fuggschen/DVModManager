@@ -3,6 +3,21 @@
 This is a supplementary mod for Derail Valley to associate mod profiles with save files and to
 provide Steam Cloud synchronization of said associations and the configured mod settings.
 
+### Multiplayer
+
+With the [Multiplayer mod](https://github.com/AMacro/dv-multiplayer) installed, a host running
+this mod sends its current mod settings to each player who joins. Clients will get a prompt the first
+time they join a session with this feature enabled:
+
+- **Always**: play with the host's settings every time they join that server.
+- **Once**: keep a copy of the host's settings from that join, and play with the copy from then
+  on without syncing again.
+- **Never**: keep playing with their own settings.
+
+A player's own settings are restored to their previous state when they leave the game.
+
+Hosts can prevent sharing of their settings with a toggle in this mod's settings.
+
 ## Building
 
 Building the project requires some initial setup, after which running `dotnet build`

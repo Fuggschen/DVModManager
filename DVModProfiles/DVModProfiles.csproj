@@ -41,7 +41,17 @@
 
 	<!-- Mod Loader -->
 	<ItemGroup>
-		<PackageReference Include="UnityModManager" Version="0.27.2"/>
+		<PackageReference Include="UnityModManager" Version="0.27.2" NoWarn="NU1605"/>
+	</ItemGroup>
+
+	<!-- Multiplayer. Compile-time only. -->
+	<ItemGroup>
+		<PackageReference Include="DVMultiplayerAPI" Version="1.1.0" ExcludeAssets="runtime" PrivateAssets="all"/>
+	</ItemGroup>
+
+	<!-- Unity Analyzers: Unity-aware null checks and other Unity-specific diagnostics -->
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Unity.Analyzers" Version="1.27.0" PrivateAssets="all"/>
 	</ItemGroup>
 
 	<!-- Null Checking -->

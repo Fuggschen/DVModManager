@@ -58,8 +58,6 @@ internal static class ProfileSelectorInjector
             GateAndApply(__instance, "OnStartNewGameRequested", data?.session, data);
     }
 
-    private static PopupManager? popupManager;
-
     // Set immediately before re-invoking a load so the gate is skipped and it proceeds.
     private static bool bypassGate;
 
@@ -92,7 +90,7 @@ internal static class ProfileSelectorInjector
             return true;
         }
 
-        if (!TryGetPopup(menu, out PopupManager pm, out Popup prefab))
+        if (!Popups.TryGetThreeButton(menu, out PopupManager pm, out Popup prefab))
         {
             Main.Logger.Warning($"Session is associated with profile '{profileName}' but the mod manager has " +
                                 $"'{active}' applied, and no popup is available to ask; loading anyway.");
@@ -148,18 +146,6 @@ internal static class ProfileSelectorInjector
         {
             Main.Logger.LogException("Profile mismatch gate failed", ex);
         }
-    }
-
-    private static bool TryGetPopup(MainMenuController menu, out PopupManager pm, out Popup prefab)
-    {
-        pm = menu.FindPopupManager(ref popupManager);
-
-        Popup? found = Resources.FindObjectsOfTypeAll<PopupNotificationReferences>()
-            .Select(references => references.popup3Buttons)
-            .FirstOrDefault(popup => popup != null && popup.abortionButton != null);
-
-        prefab = found!;
-        return pm != null && found != null && pm.CanShowPopup();
     }
 
     private static void Reinvoke(MainMenuController menu, string methodName, object? argument)

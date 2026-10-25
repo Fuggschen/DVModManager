@@ -5,6 +5,7 @@
 	"Author": "SharkBaitDLS",
 	"EntryMethod": "DVModProfiles.Main.Load",
 	"ManagerVersion": "0.27.2",
+	"LoadAfter": ["Multiplayer"],
 	"Repository": "https://raw.githubusercontent.com/Fuggschen/DVModManager/main/DVModProfiles/repository.json",
 	"MultiplayerCompatibility": "Client"
 }
