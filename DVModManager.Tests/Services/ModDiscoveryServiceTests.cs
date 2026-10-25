@@ -115,8 +115,15 @@ public class ModDiscoveryServiceTests
                 await Task.Delay(10);
             }
 
-            // Debounce window is 500ms after the last change; wait with slack.
-            await Task.Delay(800);
+            // Debounce window is 500ms after the last change. Shared CI runners can
+            // delay the timer well past that, so poll for the first fire instead of
+            // relying on a fixed sleep.
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (Volatile.Read(ref fires) == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(50);
+
+            // Then outlast another full debounce window to catch any extra fire.
+            await Task.Delay(700);
 
             Assert.Equal(1, Volatile.Read(ref fires));
         }
