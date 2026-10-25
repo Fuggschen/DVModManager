@@ -14,16 +14,21 @@ public class ManagerUpdateService : IManagerUpdateService
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<ManagerUpdateService> _logger;
     private readonly string? _processPath;
+    private readonly string _appBaseDir;
     private readonly Action<string> _startProcess;
 
     public ManagerUpdateService(IHttpClientFactory httpFactory, ILogger<ManagerUpdateService> logger,
-        string? processPath = null, Action<string>? startProcess = null)
+        string? processPath = null, Action<string>? startProcess = null, string? appBaseDir = null)
     {
         _httpFactory = httpFactory;
         _logger = logger;
         _processPath = processPath ?? Environment.ProcessPath;
         _startProcess = startProcess ?? StartProcess;
+        _appBaseDir = appBaseDir ?? AppContext.BaseDirectory;
     }
+
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     internal static string RuntimeId => OperatingSystem.IsWindows() ? "win-x64" : "linux-x64";
 
@@ -165,6 +170,9 @@ public class ManagerUpdateService : IManagerUpdateService
             return;
         }
 
+        // The previous process may still load from its extraction folder; wait one more start
+        if (leftovers.Length == 0) CleanupOldExtractionDirs(dir);
+
         // The previous process may still be shutting down and holding its executable
         const int attempts = 10;
         foreach (var file in leftovers)
@@ -186,6 +194,34 @@ public class ManagerUpdateService : IManagerUpdateService
                     await Task.Delay(500, ct);
                 }
             }
+        }
+    }
+
+    /// <summary>Single-file builds extract to {extract base}/DVModManager/{hash}, a new hash per release.</summary>
+    private void CleanupOldExtractionDirs(string exeDir)
+    {
+        var current = Path.TrimEndingDirectorySeparator(_appBaseDir);
+
+        // Not running extracted, e.g. `dotnet run`
+        if (string.Equals(current, Path.TrimEndingDirectorySeparator(exeDir), PathComparison)) return;
+
+        var root = Path.GetDirectoryName(current);
+        if (root == null
+            || !string.Equals(Path.GetFileName(root), Path.GetFileNameWithoutExtension(_processPath), PathComparison))
+            return;
+
+        string[] dirs;
+        try { dirs = Directory.GetDirectories(root); }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not scan extraction folder {Root}", root);
+            return;
+        }
+
+        foreach (var d in dirs)
+        {
+            if (string.Equals(Path.TrimEndingDirectorySeparator(d), current, PathComparison)) continue;
+            TryDeleteDirectory(d);
         }
     }
 
