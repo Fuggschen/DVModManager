@@ -4,12 +4,12 @@ permissions:
 
 on:
   push:
-    branches: [main, beta]
+    branches: [main, beta, dev-profiles]
     paths-ignore:
       - 'DVModProfiles/**'
       - '**/*.md'
   pull_request:
-    branches: [main, beta]
+    branches: [main, beta, dev-profiles]
     paths-ignore:
       - 'DVModProfiles/**'
       - '**/*.md'
