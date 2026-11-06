@@ -4,9 +4,9 @@ permissions:
 
 on:
   push:
-    branches: [main, beta]
+    branches: [main, beta, dev-profiles]
   pull_request:
-    branches: [main, beta]
+    branches: [main, beta, dev-profiles]
 
 jobs:
   build:
