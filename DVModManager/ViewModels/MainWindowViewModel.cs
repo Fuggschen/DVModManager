@@ -2351,6 +2351,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         SetBusy(_localization.GetString("busy.manager_update_downloading", 0));
+        var applied = false;
         try
         {
             var progress = new Progress<double>(p =>
@@ -2359,7 +2360,18 @@ public partial class MainWindowViewModel : ViewModelBase
 
             BusyMessage = _localization.GetString("busy.manager_update_installing");
             _managerUpdate.ApplyUpdate(staged);
+            applied = true;
             _managerUpdate.StartNewInstance();
+        }
+        catch (Exception ex) when (applied)
+        {
+            // The new executable is already in place; only the automatic restart failed
+            _logger.LogError(ex, "Manager update installed, but the new instance could not be started");
+            ClearBusy();
+            await _dialogService.ShowMessageAsync(
+                _localization.GetString("dialog.manager_update_title"),
+                _localization.GetString("dialog.manager_update_restart_failed_message",
+                    LatestManagerVersion, ex.Message, Environment.NewLine + Environment.NewLine));
         }
         catch (Exception ex)
         {

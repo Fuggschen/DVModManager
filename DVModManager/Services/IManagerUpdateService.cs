@@ -24,6 +24,9 @@ public interface IManagerUpdateService
     /// <summary>Starts the (updated) executable as a new process.</summary>
     void StartNewInstance();
 
-    /// <summary>Deletes files left over from a previous update. Retries while the old process exits.</summary>
+    /// <summary>
+    /// Deletes files left over from a previous update. Retries while the old process exits.
+    /// Extraction folders of older versions are removed once no such files are left.
+    /// </summary>
     Task CleanupOldFilesAsync(CancellationToken ct = default);
 }
