@@ -13,6 +13,7 @@ public partial class SettingsViewModel : ViewModelBase
     private readonly IUmmLoaderService _loaderService;
     private readonly IUmmReleaseFeedService _ummFeed;
     private readonly IStorageMoveService _storageMove;
+    private readonly IMonoRuntimeService _runtimeService;
     private readonly ILocalizationService? _localization;
 
     public bool Saved { get; private set; }
@@ -28,12 +29,16 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private string _themeVariant = "Dark";
     [ObservableProperty] private string _language = "en";
     [ObservableProperty] private string _loaderMethod = AppSettings.DefaultUmmLoaderMethod;
+    [ObservableProperty] private string _runtimeChannel = nameof(MonoRuntimeChannel.Standard);
 
     // Available language options for the UI
     public List<string> AvailableLanguages { get; } = ["en", "de", "fr", "zh"];
 
     // UMM loader options (feature #21): injection method
     public List<string> AvailableLoaderMethods { get; } = ["Doorstop", "Assembly"];
+
+    // Patched Mono runtime build
+    public List<string> AvailableRuntimeChannels { get; } = Enum.GetNames<MonoRuntimeChannel>().ToList();
 
     // Display names for languages (for the dropdown)
     public Dictionary<string, string> LanguageDisplayNames => new()
@@ -46,7 +51,7 @@ public partial class SettingsViewModel : ViewModelBase
 
     public SettingsViewModel(IDialogService dialogService, IGameDetectionService gameDetection,
         ISettingsService settings, IUmmLoaderService loaderService, IUmmReleaseFeedService ummFeed,
-        IStorageMoveService storageMove)
+        IStorageMoveService storageMove, IMonoRuntimeService runtimeService)
     {
         _dialogService = dialogService;
         _gameDetection = gameDetection;
@@ -54,6 +59,7 @@ public partial class SettingsViewModel : ViewModelBase
         _loaderService = loaderService;
         _ummFeed = ummFeed;
         _storageMove = storageMove;
+        _runtimeService = runtimeService;
         
         // Try to get localization service if available
         try
@@ -76,8 +82,12 @@ public partial class SettingsViewModel : ViewModelBase
         LoaderMethod = AvailableLoaderMethods.Contains(settings.UmmLoaderMethod)
             ? settings.UmmLoaderMethod
             : AppSettings.DefaultUmmLoaderMethod;
+        RuntimeChannel = AvailableRuntimeChannels.Contains(settings.MonoRuntimeChannel)
+            ? settings.MonoRuntimeChannel
+            : nameof(MonoRuntimeChannel.Standard);
         Saved = false;
         RefreshLoaderState();
+        RefreshRuntimeState();
     }
 
     public void Apply(AppSettings settings)
@@ -90,6 +100,7 @@ public partial class SettingsViewModel : ViewModelBase
         settings.ThemeVariant = ThemeVariant;
         settings.Language = Language;
         settings.UmmLoaderMethod = LoaderMethod;
+        settings.MonoRuntimeChannel = RuntimeChannel;
     }
 
     [RelayCommand]
@@ -259,6 +270,140 @@ public partial class SettingsViewModel : ViewModelBase
         await _dialogService.ShowMessageAsync(
             L("settings.section.loader"),
             L(ok ? "status.loader_uninstalled" : "status.loader_install_failed"));
+    }
+
+    // ── Mono runtime ───────────────────────────────────────────
+
+    private MonoRuntimeStatus? _runtimeStatus;
+    private MonoRuntimeRelease? _runtimeRelease;
+
+    [ObservableProperty] private string _runtimeIndicatorLoaded = "";
+    [ObservableProperty] private string _runtimeIndicatorUnity = "";
+    [ObservableProperty] private string _runtimeIndicatorLatest = "";
+    [ObservableProperty] private string _runtimeIndicatorBackup = "";
+    [ObservableProperty] private bool _canInstallRuntime;
+    [ObservableProperty] private bool _canRestoreRuntime;
+
+    private MonoRuntimeChannel SelectedRuntimeChannel =>
+        Enum.TryParse<MonoRuntimeChannel>(RuntimeChannel, out var channel) ? channel : MonoRuntimeChannel.Standard;
+
+    partial void OnRuntimeChannelChanged(string value) => RefreshRuntimeState();
+
+    /// <summary>Re-reads the runtime DLL from disk and refreshes the indicator.</summary>
+    public void RefreshRuntimeState()
+    {
+        _runtimeRelease = null;
+        ReadRuntimeStatus();
+        RuntimeIndicatorLatest = L("runtime.indicator.latest", "?");
+
+        UpdateRuntimeActions();
+        _ = CheckRuntimeReleaseAsync(SelectedRuntimeChannel);   // silent feed check → fills Latest patch
+    }
+
+    private void ReadRuntimeStatus()
+    {
+        var status = string.IsNullOrWhiteSpace(GamePath)
+            ? null
+            : _runtimeService.GetStatus(GamePath, SelectedRuntimeChannel);
+        _runtimeStatus = status;
+
+        var kind = status?.Kind switch
+        {
+            not MonoRuntimeKind.NotFound when status is { UnityVersionSupported: false, UnityVersion: not null }
+                => L("runtime.kind.not_needed", status.UnityVersion),
+            MonoRuntimeKind.Stock => L("runtime.kind.stock"),
+            MonoRuntimeKind.Modified when status.PatchId != null => L("runtime.kind.patched",
+                ChannelLabel(status.PatchId), status.PatchVersion ?? "?"),
+            MonoRuntimeKind.Modified => L("runtime.kind.unknown"),
+            _ => L("runtime.kind.not_found")
+        };
+        RuntimeIndicatorLoaded = L("runtime.indicator.loaded", kind);
+        RuntimeIndicatorUnity = L("runtime.indicator.unity",
+            status?.UnityVersion ?? "?", MonoRuntimeService.SupportedUnityVersion);
+        RuntimeIndicatorBackup = L("runtime.indicator.backup",
+            L(status?.BackupPresent == true ? "dialog.button.yes" : "dialog.button.no"));
+    }
+
+    /// <summary>Dropdown name of the channel a feed Id belongs to; unknown Ids are shown as-is.</summary>
+    private static string ChannelLabel(string? feedId) =>
+        Enum.GetValues<MonoRuntimeChannel>()
+            .Where(c => MonoRuntimeRelease.GetFeedId(c) == feedId)
+            .Select(c => c.ToString())
+            .FirstOrDefault() ?? feedId ?? "?";
+
+    private void UpdateRuntimeActions()
+    {
+        var status = _runtimeStatus;
+        var release = _runtimeRelease;
+        CanInstallRuntime = status is { UnityVersionSupported: true } && release != null && status.Kind switch
+        {
+            MonoRuntimeKind.Stock => true,
+            MonoRuntimeKind.Modified => status.PatchId != release.Id || status.PatchVersion != release.Version,
+            _ => false
+        };
+        CanRestoreRuntime = status is { UnityVersionSupported: true, Kind: MonoRuntimeKind.Modified };
+    }
+
+    /// <summary>Looks up the newest feed release of <paramref name="channel"/>.</summary>
+    private async Task CheckRuntimeReleaseAsync(MonoRuntimeChannel channel)
+    {
+        var release = await _runtimeService.GetLatestReleaseAsync(channel);
+        // The dropdown may have changed while the feed was loading.
+        if (channel != SelectedRuntimeChannel) return;
+
+        _runtimeRelease = release;
+        RuntimeIndicatorLatest = L("runtime.indicator.latest", release?.Version ?? L("runtime.latest.none"));
+        // The feed's hashes can now name the installed build.
+        ReadRuntimeStatus();
+        UpdateRuntimeActions();
+    }
+
+    [RelayCommand]
+    private async Task InstallRuntimeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(GamePath) || _runtimeStatus == null || _runtimeRelease == null) return;
+        if (_gameDetection.IsGameRunning())
+        {
+            await _dialogService.ShowMessageAsync(
+                L("settings.section.runtime"), L("status.game_running_locked"));
+            return;
+        }
+
+        var channel = SelectedRuntimeChannel;
+        var label = $"{channel} {_runtimeRelease.Version}";
+        var confirmed = await _dialogService.ConfirmAsync(L("runtime.install_confirm.title"),
+            L("runtime.install_confirm.message", label));
+        if (!confirmed) return;
+
+        // Like the loader method: the dropdown selection takes effect with the install.
+        _settings.Settings.MonoRuntimeChannel = RuntimeChannel;
+        await _settings.SaveAsync();
+
+        var ok = await _runtimeService.InstallPatchAsync(GamePath, channel);
+        RefreshRuntimeState();
+        await _dialogService.ShowMessageAsync(
+            L("settings.section.runtime"),
+            ok
+                ? L("status.runtime_installed", label)
+                : L("status.runtime_install_failed"));
+    }
+
+    [RelayCommand]
+    private async Task RestoreRuntimeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(GamePath) || _runtimeStatus == null) return;
+        if (_gameDetection.IsGameRunning())
+        {
+            await _dialogService.ShowMessageAsync(
+                L("settings.section.runtime"), L("status.game_running_locked"));
+            return;
+        }
+
+        var ok = _runtimeStatus.BackupPresent && await _runtimeService.RestoreOriginalAsync(GamePath);
+        RefreshRuntimeState();
+        await _dialogService.ShowMessageAsync(
+            L("settings.section.runtime"),
+            L(ok ? "status.runtime_restored" : "status.runtime_restore_failed"));
     }
 
     [RelayCommand]

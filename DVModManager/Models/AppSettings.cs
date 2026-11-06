@@ -34,6 +34,9 @@ public class AppSettings : PublicSettings
     /// </summary>
     public string UmmLoaderMethod { get; set; } = DefaultUmmLoaderMethod;
 
+    /// <summary>Patched Mono runtime build to install: "Standard" or "Debug".</summary>
+    public string MonoRuntimeChannel { get; set; } = nameof(Models.MonoRuntimeChannel.Standard);
+
     /// <summary>User-defined visual groups for both mod panels.</summary>
     public List<ModGroup> ModGroups { get; set; } = [];
 
