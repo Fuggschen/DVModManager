@@ -5,6 +5,7 @@
 		<LangVersion>latest</LangVersion>
 		<Nullable>enable</Nullable>
 		<WarningsAsErrors>CS8600;CS8602;CS8603</WarningsAsErrors>
+		<DefaultItemExcludes>$(DefaultItemExcludes);DVModProfiles.Multiplayer/**</DefaultItemExcludes>
 	</PropertyGroup>
 
 	<!--
@@ -44,9 +45,9 @@
 		<PackageReference Include="UnityModManager" Version="0.27.2" NoWarn="NU1605"/>
 	</ItemGroup>
 
-	<!-- Multiplayer. Compile-time only. -->
+	<!-- Multiplayer is its own DLL that's only loaded when the mod is present. -->
 	<ItemGroup>
-		<PackageReference Include="DVMultiplayerAPI" Version="1.1.0" ExcludeAssets="runtime" PrivateAssets="all"/>
+		<ProjectReference Include="DVModProfiles.Multiplayer\DVModProfiles.Multiplayer.csproj" ReferenceOutputAssembly="false"/>
 	</ItemGroup>
 
 	<!-- Unity Analyzers: Unity-aware null checks and other Unity-specific diagnostics -->

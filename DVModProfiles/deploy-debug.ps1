@@ -15,7 +15,7 @@ if (!(Test-Path $ModInstallDir)) {
 dotnet build -c Debug "DVModProfiles.csproj"
 if ($LASTEXITCODE -ne 0) { throw "Build failed." }
 
-Copy-Item -Force -Path "build/$modId.dll" -Destination $ModInstallDir
+Copy-Item -Force -Path "build/$modId.dll","build/$modId.Multiplayer.dll" -Destination $ModInstallDir
 Copy-Item -Force -Path "info.json" -Destination $ModInstallDir
 
 Write-Host "Deployed $modId (Debug) to $ModInstallDir"

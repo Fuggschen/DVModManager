@@ -3,8 +3,6 @@ using MPAPI.Interfaces.Packets;
 
 namespace DVModProfiles.Multiplayer;
 
-// One piece of a host's mod settings. The Multiplayer mod can't fit much more than 64 KiB in a
-// packet, which a whole profile can outgrow, so it's sent in pieces.
 public class HostProfilePacket : ISerializablePacket
 {
     // Read first, so a host sending a different layout is recognised rather than misread

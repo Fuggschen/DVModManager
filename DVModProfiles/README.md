@@ -90,7 +90,7 @@ into your Derail Valley installation directory.
 
 ## Deploying a debug build
 
-`deploy-debug.ps1` builds in Debug and copies the DLL and `info.json` straight into your
+`deploy-debug.ps1` builds in Debug and copies the DLLs and `info.json` straight into your
 game's `Mods/DVModProfiles` folder, reading the game location from your
 `Directory.Build.targets`. The mod must already be installed once for the target folder
 to exist.
