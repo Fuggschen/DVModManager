@@ -2,6 +2,7 @@ using System.Text;
 using DVModProfiles.Profiles;
 using Newtonsoft.Json;
 using Steamworks;
+using UnityModManagerNet;
 
 namespace DVModProfiles.Multiplayer;
 
@@ -18,13 +19,42 @@ internal sealed class HostProfile
 
     public ProfileSettings Settings = new();
 
-    // The mod settings we're playing with right now, as the host
+    // MP settings can leak credentials for others servers and should never sync (nor is there a need to).
+    private static readonly HashSet<string> NeverShared = [MultiplayerSupport.MULTIPLAYER_MOD_ID];
+
+    public static bool CanShare(string modId) => !NeverShared.Contains(modId);
+
+    public static bool Shares(string modId) =>
+        CanShare(modId) && !Main.Config.notSharedWithMultiplayerClients.Contains(modId);
+
+    public static List<UnityModManager.ModEntry> ShareableMods() =>
+    [
+        .. UnityModManager.modEntries
+            .Where(mod => mod.Info.Id != Main.ModEntry.Info.Id && CanShare(mod.Info.Id) && SettingsStore.HasSettings(mod))
+            .OrderBy(mod => mod.Info.DisplayName, StringComparer.OrdinalIgnoreCase),
+    ];
+
+    public static List<string> DropNeverShared(ProfileSettings settings)
+    {
+        List<string> dropped = [.. settings.Settings.Keys.Where(id => !CanShare(id))];
+        foreach (string id in dropped)
+        {
+            settings.Settings.Remove(id);
+        }
+
+        return dropped;
+    }
+
     public static byte[] Current()
     {
-        var profile = new HostProfile
+        ProfileSettings settings =
+            SettingsStore.Snapshot(SettingsAutoCapture.LoadedProfile ?? ManagerProfiles.ActiveProfileName ?? "");
+        foreach (string id in settings.Settings.Keys.Where(id => !Shares(id)).ToList())
         {
-            Settings = SettingsStore.Snapshot(SettingsAutoCapture.LoadedProfile ?? ManagerProfiles.ActiveProfileName ?? ""),
-        };
+            settings.Settings.Remove(id);
+        }
+
+        var profile = new HostProfile { Settings = settings };
 
         if (SteamClient.IsValid)
         {

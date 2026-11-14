@@ -60,6 +60,10 @@ public static class Main
 
         Config.shareWithMultiplayerClients = GUILayout.Toggle(Config.shareWithMultiplayerClients,
             "  Share my mod settings with the players who join multiplayer games I host");
+        if (Config.shareWithMultiplayerClients)
+        {
+            DrawSharedMods();
+        }
 
         List<HostProfilePreference> servers = [.. HostProfiles.All];
         if (servers.Count == 0)
@@ -79,6 +83,54 @@ public static class Main
 
             GUILayout.EndHorizontal();
         }
+    }
+
+    private static List<UnityModManager.ModEntry>? shareableMods;
+
+    private static void DrawSharedMods()
+    {
+        List<string> notShared = Config.notSharedWithMultiplayerClients;
+        int held = notShared.Count(id => UnityModManager.FindMod(id) != null);
+        string which = held == 0 ? "all of them" : $"all but {held}";
+
+        GUILayout.BeginHorizontal();
+        GUILayout.Space(20);
+        bool open = GUILayout.Toggle(shareableMods != null, $"  Choose which mods' settings to share ({which})");
+        GUILayout.EndHorizontal();
+
+        if (!open)
+        {
+            shareableMods = null;
+            return;
+        }
+
+        shareableMods ??= HostProfile.ShareableMods();
+        foreach (UnityModManager.ModEntry mod in shareableMods)
+        {
+            string id = mod.Info.Id;
+            bool shared = !notShared.Contains(id);
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Space(40);
+            if (GUILayout.Toggle(shared, $"  {mod.Info.DisplayName}") != shared)
+            {
+                if (shared)
+                {
+                    notShared.Add(id);
+                }
+                else
+                {
+                    notShared.Remove(id);
+                }
+            }
+
+            GUILayout.EndHorizontal();
+        }
+
+        GUILayout.BeginHorizontal();
+        GUILayout.Space(40);
+        GUILayout.Label("The Multiplayer mod's own settings are never shared.");
+        GUILayout.EndHorizontal();
     }
 
     private static void OnSaveGUI(UnityModManager.ModEntry modEntry) => Config.Save(modEntry);

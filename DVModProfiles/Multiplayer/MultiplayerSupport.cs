@@ -8,7 +8,7 @@ namespace DVModProfiles.Multiplayer;
 // mod is known to be, and this one never references it.
 internal static class MultiplayerSupport
 {
-    private const string MULTIPLAYER_MOD_ID = "Multiplayer";
+    public const string MULTIPLAYER_MOD_ID = "Multiplayer";
     private const string HOOKS_ASSEMBLY = "DVModProfiles.Multiplayer.dll";
     private const string HOOKS_TYPE = "DVModProfiles.Multiplayer.MultiplayerHooks";
 

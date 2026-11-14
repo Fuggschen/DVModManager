@@ -159,6 +159,12 @@ internal static class HostProfileClient
 
     private static void OnReceived(HostProfile host)
     {
+        List<string> dropped = HostProfile.DropNeverShared(host.Settings);
+        if (dropped.Count > 0)
+        {
+            Main.Logger.Log($"Ignoring the host's settings for {string.Join(", ", dropped)}, which should not have been sent.");
+        }
+
         received = host;
         string profileName = host.Settings.Name;
         if (string.IsNullOrEmpty(host.Settings.Name))
@@ -246,7 +252,11 @@ internal static class HostProfileClient
 
             case HostProfileChoice.Once:
                 ProfileSettings? copy = server == "" ? null : HostProfiles.LoadCopy(server);
-                if (copy == null)
+                if (copy != null)
+                {
+                    HostProfile.DropNeverShared(copy);
+                }
+                else
                 {
                     copy = host.Settings;
                     if (server != "")

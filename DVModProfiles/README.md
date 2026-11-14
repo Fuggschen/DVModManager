@@ -16,7 +16,9 @@ time they join a session with this feature enabled:
 
 A player's own settings are restored to their previous state when they leave the game.
 
-Hosts can prevent sharing of their settings with a toggle in this mod's settings.
+Hosts can prevent sharing of their settings with a toggle in this mod's settings, or keep only some
+mods' settings to themselves by unticking those mods under it. The Multiplayer mod's own settings
+are never shared since they contain server credentials and other potential secrets.
 
 ## Building
 
@@ -94,6 +96,31 @@ into your Derail Valley installation directory.
 game's `Mods/DVModProfiles` folder, reading the game location from your
 `Directory.Build.targets`. The mod must already be installed once for the target folder
 to exist.
+
+## Testing multiplayer on one PC
+
+`run-second-instance.ps1` starts a second copy of the game next to one that's already running, so
+you can join your own multiplayer game with the same Steam account. Unity Mod Manager loads mods
+from `Mods` next to the game, so the second copy runs from a game folder of its own
+(`%LOCALAPPDATA%\DVModProfiles\SecondInstance` by default). That folder holds copies of the game's
+executables, junctions to its `DerailValley_Data` and `MonoBleedingEdge` folders, and its own copy
+of `Mods`, which gives it its own mod settings for the host's to replace. To test, start the first
+copy and host a game from it, run the script, then direct connect to `127.0.0.1` from the second
+copy. Don't delete the instance folder recursively, as that would follow the junctions into the
+game's install.
+
+The first run copies the game's whole `Mods` folder. Later runs copy over only the mods' DLLs and
+`info.json` files, along with any mods new to the main copy, so a fresh `deploy-debug.ps1` reaches
+both copies while the second copy keeps its own settings. `-Reset` copies everything again. The
+second copy also gets:
+
+- its own player in multiplayer games: a new Multiplayer GUID, and the name from `-Username`
+  (`Player2` by default)
+- Steam Cloud turned off in this mod, so the two copies don't sync into each other
+- no remembered host choices to start with, so you get the prompt when you join
+
+It runs windowed and out of VR, with its log in its own folder. Both copies still share the game's
+saves, preferences and Unity Mod Manager's own files.
 
 ## License
 

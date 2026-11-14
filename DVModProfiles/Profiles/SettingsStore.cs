@@ -89,6 +89,8 @@ public static class SettingsStore
         }
     }
 
+    public static bool HasSettings(UnityModManager.ModEntry mod) => File.Exists(Path.Combine(mod.Path, SETTINGS_FILE));
+
     internal static string Sanitize(string name)
     {
         foreach (char c in Path.GetInvalidFileNameChars())

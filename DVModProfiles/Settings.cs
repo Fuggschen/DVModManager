@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using DVModProfiles.Profiles;
 using UnityModManagerNet;
 
@@ -10,6 +9,9 @@ public class Settings : UnityModManager.ModSettings
 
     // Send our mod settings to the players who join a multiplayer game we're hosting
     public bool shareWithMultiplayerClients = true;
+
+    // The mods whose settings we keep to ourselves when sharing, by mod ID
+    public List<string> notSharedWithMultiplayerClients = [];
 
     public List<HostProfilePreference> hostProfilePreferences = [];
 }
