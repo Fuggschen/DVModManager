@@ -65,11 +65,25 @@ public class ManagerUpdateServiceTests : IDisposable
     }
 
     private ManagerUpdateService CreateService(byte[]? payload = null, Action<string>? startProcess = null,
-        StubHttpMessageHandler? handler = null)
+        StubHttpMessageHandler? handler = null, string? appBaseDir = null)
     {
         handler ??= new StubHttpMessageHandler(payload ?? []);
         return new ManagerUpdateService(new StubHttpClientFactory(handler),
-            NullLogger<ManagerUpdateService>.Instance, _exePath, startProcess ?? (_ => { }));
+            NullLogger<ManagerUpdateService>.Instance, _exePath, startProcess ?? (_ => { }),
+            appBaseDir ?? _installDir);
+    }
+
+    /// <summary>Mimics the single-file host layout: {extract base}/DVModManager/{hash}.</summary>
+    private string[] CreateExtractionDirs(params string[] hashes)
+    {
+        var root = Path.Combine(_workDir, "extract", Path.GetFileNameWithoutExtension(ManagerUpdateService.ExecutableName));
+        return hashes.Select(h =>
+        {
+            var d = Path.Combine(root, h);
+            Directory.CreateDirectory(d);
+            File.WriteAllText(Path.Combine(d, "DVModManager.dll"), "");
+            return d;
+        }).ToArray();
     }
 
     private string Stage(params (string Name, string Content)[] files)
@@ -193,5 +207,43 @@ public class ManagerUpdateServiceTests : IDisposable
 
         Assert.False(File.Exists(backup));
         Assert.True(File.Exists(unrelated));
+    }
+
+    [Fact]
+    public async Task CleanupOldFiles_DeletesOtherExtractionDirs()
+    {
+        var dirs = CreateExtractionDirs("current", "older", "oldest");
+
+        await CreateService(appBaseDir: dirs[0] + Path.DirectorySeparatorChar).CleanupOldFilesAsync();
+
+        Assert.True(Directory.Exists(dirs[0]));
+        Assert.False(Directory.Exists(dirs[1]));
+        Assert.False(Directory.Exists(dirs[2]));
+    }
+
+    [Fact]
+    public async Task CleanupOldFiles_RightAfterUpdate_KeepsExtractionDirs()
+    {
+        File.WriteAllText(_exePath + ManagerUpdateService.OldFileSuffix, "old");
+        var dirs = CreateExtractionDirs("current", "older");
+
+        await CreateService(appBaseDir: dirs[0]).CleanupOldFilesAsync();
+
+        Assert.True(Directory.Exists(dirs[1]));
+    }
+
+    [Fact]
+    public async Task CleanupOldFiles_UnexpectedLayout_DeletesNothing()
+    {
+        var other = Path.Combine(_workDir, "sibling");
+        Directory.CreateDirectory(other);
+
+        // Base dir equals the executable dir: not running extracted
+        await CreateService().CleanupOldFilesAsync();
+        // Base dir parent not named after the executable
+        await CreateService(appBaseDir: Path.Combine(_workDir, "somewhere")).CleanupOldFilesAsync();
+
+        Assert.True(Directory.Exists(other));
+        Assert.True(Directory.Exists(_installDir));
     }
 }

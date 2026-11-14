@@ -138,6 +138,7 @@ public class App : Application
         services.AddSingleton<AssemblyPatcher>();
         services.AddSingleton<IUmmLoaderService, UmmLoaderService>();
         services.AddSingleton<IUmmParamsService, UmmParamsService>();
+        services.AddSingleton<IMonoRuntimeService, MonoRuntimeService>();
 
         // ViewModels
         services.AddTransient<MainWindowViewModel>();

@@ -52,12 +52,22 @@ public class SettingsViewModelTests : IDisposable
             => Task.FromResult<IReadOnlyList<UmmReleaseInfo>>([]);
     }
 
+    private class StubRuntimeService : IMonoRuntimeService
+    {
+        public MonoRuntimeStatus GetStatus(string gamePath, MonoRuntimeChannel channel) => new();
+        public Task<MonoRuntimeRelease?> GetLatestReleaseAsync(MonoRuntimeChannel channel, CancellationToken ct = default)
+            => Task.FromResult<MonoRuntimeRelease?>(null);
+        public Task<bool> InstallPatchAsync(string gamePath, MonoRuntimeChannel channel,
+            IProgress<double>? progress = null, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> RestoreOriginalAsync(string gamePath, CancellationToken ct = default) => Task.FromResult(true);
+    }
+
     [Fact]
     public void Load_And_Apply_CorrectlyMapsAppSettings()
     {
         var gameDetection = new GameDetectionService(NullLogger<GameDetectionService>.Instance);
         var dialogService = new DummyDialogService();
-        var vm = new SettingsViewModel(dialogService, gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService(), CreateStorageMove());
+        var vm = new SettingsViewModel(dialogService, gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService(), CreateStorageMove(), new StubRuntimeService());
 
         var originalSettings = new AppSettings
         {
@@ -107,7 +117,7 @@ public class SettingsViewModelTests : IDisposable
     {
         var gameDetection = new GameDetectionService(NullLogger<GameDetectionService>.Instance);
         var dialogService = new DummyDialogService();
-        var vm = new SettingsViewModel(dialogService, gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService(), CreateStorageMove());
+        var vm = new SettingsViewModel(dialogService, gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService(), CreateStorageMove(), new StubRuntimeService());
 
         Assert.Contains("en", vm.AvailableLanguages);
         Assert.Contains("de", vm.AvailableLanguages);
@@ -129,7 +139,7 @@ public class SettingsViewModelTests : IDisposable
         var settings = TestData.CreateSettingsService(_workDir);
         settings.Settings.GamePath = "/path/to/game";
         var loader = new StubLoaderService();
-        var vm = new SettingsViewModel(dialogService, gameDetection, settings, loader, new StubUmmFeedService(), CreateStorageMove());
+        var vm = new SettingsViewModel(dialogService, gameDetection, settings, loader, new StubUmmFeedService(), CreateStorageMove(), new StubRuntimeService());
         vm.Load(settings.Settings);
 
         vm.LoaderMethod = "Assembly";
@@ -137,5 +147,28 @@ public class SettingsViewModelTests : IDisposable
 
         Assert.Equal(1, loader.InstallCalls);
         Assert.Equal("Assembly", settings.Settings.UmmLoaderMethod);
+    }
+
+    [Theory]
+    [InlineData("Debug", "Debug")]
+    [InlineData("Standard", "Standard")]
+    [InlineData("bogus", "Standard")]
+    public void Load_And_Apply_MapsRuntimeChannel(string stored, string expected)
+    {
+        var gameDetection = new GameDetectionService(NullLogger<GameDetectionService>.Instance);
+        var vm = new SettingsViewModel(new DummyDialogService(), gameDetection, TestData.CreateSettingsService(_workDir), new StubLoaderService(), new StubUmmFeedService(), CreateStorageMove(), new StubRuntimeService());
+
+        vm.Load(new AppSettings { MonoRuntimeChannel = stored });
+        Assert.Equal(expected, vm.RuntimeChannel);
+
+        var target = new AppSettings();
+        vm.Apply(target);
+        Assert.Equal(expected, target.MonoRuntimeChannel);
+    }
+
+    [Fact]
+    public void AppSettings_DefaultsToStandardRuntimeChannel()
+    {
+        Assert.Equal("Standard", new AppSettings().MonoRuntimeChannel);
     }
 }

@@ -198,6 +198,73 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
+
+                <!--  Mono Runtime  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Text="{conv:Localize settings.section.runtime}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="#cdd6f4" />
+                    <TextBlock Text="{conv:Localize settings.runtime.description}"
+                               Foreground="#6c7086"
+                               FontSize="11"
+                               TextWrapping="Wrap" />
+
+                    <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                        <TextBlock Grid.Column="0"
+                                   Text="{conv:Localize settings.runtime.channel}"
+                                   Foreground="#cdd6f4"
+                                   FontSize="13"
+                                   VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding AvailableRuntimeChannels}"
+                                  SelectedItem="{Binding RuntimeChannel, Mode=TwoWay}"
+                                  ToolTip.Tip="{conv:Localize settings.runtime.channel.tooltip}"
+                                  Background="#313244"
+                                  BorderBrush="#45475a"
+                                  Foreground="#cdd6f4"
+                                  Width="130"
+                                  HorizontalAlignment="Right" />
+                    </Grid>
+
+                    <Border Background="#181825"
+                            CornerRadius="4"
+                            Padding="12,10">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="{Binding RuntimeIndicatorLoaded}"
+                                       Foreground="#cdd6f4"
+                                       FontSize="12" />
+                            <TextBlock Text="{Binding RuntimeIndicatorUnity}"
+                                       Foreground="#cdd6f4"
+                                       FontSize="12" />
+                            <TextBlock Text="{Binding RuntimeIndicatorLatest}"
+                                       Foreground="#cdd6f4"
+                                       FontSize="12" />
+                            <TextBlock Text="{Binding RuntimeIndicatorBackup}"
+                                       Foreground="#cdd6f4"
+                                       FontSize="12" />
+
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        Margin="0,10,0,0">
+                                <Button Content="{conv:Localize runtime.button.install}"
+                                        Command="{Binding InstallRuntimeCommand}"
+                                        ToolTip.Tip="{conv:Localize runtime.button.install.tooltip}"
+                                        IsEnabled="{Binding CanInstallRuntime}"
+                                        Background="#f9e2af"
+                                        Foreground="#1e1e2e"
+                                        Padding="12,6" />
+                                <Button Content="{conv:Localize runtime.button.restore}"
+                                        Command="{Binding RestoreRuntimeCommand}"
+                                        ToolTip.Tip="{conv:Localize runtime.button.restore.tooltip}"
+                                        IsVisible="{Binding CanRestoreRuntime}"
+                                        Background="#45475a"
+                                        Foreground="#f38ba8"
+                                        Padding="12,6" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 
