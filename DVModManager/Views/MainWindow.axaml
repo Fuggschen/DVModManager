@@ -64,6 +64,13 @@
                             Foreground="#cdd6f4"
                             Padding="10,4" />
 
+                    <Button Content="{conv:Localize toolbar.mod_links}"
+                            Command="{Binding OpenModLinksCommand}"
+                            ToolTip.Tip="{conv:Localize toolbar.mod_links.tooltip}"
+                            Background="#313244"
+                            Foreground="#cdd6f4"
+                            Padding="10,4" />
+
                     <Button Content="{conv:Localize toolbar.start_game}"
                             Command="{Binding StartGameCommand}"
                             ToolTip.Tip="{conv:Localize toolbar.start_game.tooltip}"

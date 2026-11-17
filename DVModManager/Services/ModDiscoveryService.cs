@@ -50,6 +50,7 @@ public sealed class ModDiscoveryService : IModDiscoveryService
             }
         }
 
+        RemoveReplacedPlaceholders(mods);
         return mods;
     }
 
@@ -73,7 +74,11 @@ public sealed class ModDiscoveryService : IModDiscoveryService
 
         ModInfo mod;
 
-        if (infoPath == null)
+        if (infoPath == null && ModPlaceholder.Locate(folderPath) is { } placeholderPath)
+        {
+            mod = await ParsePlaceholderAsync(folderPath, placeholderPath);
+        }
+        else if (infoPath == null)
         {
             // Orphan folder — no Info.json
             mod = new ModInfo
@@ -110,6 +115,60 @@ public sealed class ModDiscoveryService : IModDiscoveryService
             mod.State = isActive ? ModState.Active : ModState.Inactive;
 
         return mod;
+    }
+
+    private async Task<ModInfo> ParsePlaceholderAsync(string folderPath, string placeholderPath)
+    {
+        var entry = await ModPlaceholder.ReadAsync(placeholderPath);
+        if (entry == null)
+            _logger.LogWarning("Failed to parse {Path}; using the folder name as mod id", placeholderPath);
+
+        var id = entry?.ModId is { } entryId && !string.IsNullOrWhiteSpace(entryId)
+            ? entryId
+            : Path.GetFileName(folderPath);
+        return new ModInfo
+        {
+            Id = id,
+            DisplayName = entry?.DisplayName is { } name && !string.IsNullOrWhiteSpace(name) ? name : id,
+            Author = entry?.Author ?? "",
+            Version = entry?.Version is { Length: > 0 } version ? version : "0.0.0",
+            HomePage = entry?.HomePageUrl,
+            Repository = entry?.RepositoryUrl,
+            Fingerprint = entry?.Fingerprint,
+            HasMetadata = false,
+            IsPlaceholder = true,
+            State = ModState.Placeholder
+        };
+    }
+
+    /// <summary>
+    /// Drops placeholders that a real install has replaced: a placeholder.json next
+    /// to a real Info.json is deleted, and a placeholder folder whose id is now
+    /// installed elsewhere is removed from disk and from <paramref name="mods"/>.
+    /// </summary>
+    private void RemoveReplacedPlaceholders(List<ModInfo> mods)
+    {
+        // Folders without Info.json fall back to their folder name as id; they are not a real install.
+        var installedIds = mods.Where(m => !m.IsPlaceholder && m.HasMetadata)
+            .Select(m => m.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mod in mods.ToList())
+        {
+            if (!mod.IsPlaceholder && ModPlaceholder.Locate(mod.FolderPath) == null) continue;
+            if (mod.IsPlaceholder && !installedIds.Contains(mod.Id)) continue;
+
+            try
+            {
+                ModPlaceholder.Remove(mod.FolderPath);
+                if (mod.IsPlaceholder) mods.Remove(mod);
+                _logger.LogInformation("Removed placeholder for installed mod {Id}", mod.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not remove placeholder in {Path}", mod.FolderPath);
+            }
+        }
     }
 
     public void StartWatching(string gamePath)

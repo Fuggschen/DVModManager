@@ -22,6 +22,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly IVersionCacheService _versionCache;
     private readonly IProfileService _profileService;
     private readonly IUpdateService _updateService;
+    private readonly INexusModFinder _nexusFinder;
+    private readonly IModLinkStore _linkStore;
     private readonly IManagerUpdateService _managerUpdate;
     private readonly IDialogService _dialogService;
     private readonly ILocalizationService _localization;
@@ -164,6 +166,8 @@ public partial class MainWindowViewModel : ViewModelBase
         IVersionCacheService versionCache,
         IProfileService profileService,
         IUpdateService updateService,
+        INexusModFinder nexusFinder,
+        IModLinkStore linkStore,
         IManagerUpdateService managerUpdate,
         IDialogService dialogService,
         ILocalizationService localization,
@@ -182,6 +186,8 @@ public partial class MainWindowViewModel : ViewModelBase
         _versionCache = versionCache;
         _profileService = profileService;
         _updateService = updateService;
+        _nexusFinder = nexusFinder;
+        _linkStore = linkStore;
         _managerUpdate = managerUpdate;
         _dialogService = dialogService;
         _localization = localization;
@@ -1184,6 +1190,78 @@ public partial class MainWindowViewModel : ViewModelBase
             Helpers.PlatformHelper.Open(folderPath);
     }
 
+    [RelayCommand]
+    private void OpenOnNexus()
+    {
+        if (SelectedMod?.NexusUrl is { } url)
+            Helpers.PlatformHelper.Open(url);
+    }
+
+    /// <summary>
+    /// Looks the selected mod up on Nexus. A sure match opens the page and is kept in
+    /// the link store; an uncertain one lists the candidates for the user to check.
+    /// </summary>
+    [RelayCommand]
+    private async Task SearchOnNexusAsync()
+    {
+        var mod = SelectedMod;
+        if (mod == null || mod.IsNexusSearching) return;
+
+        mod.NexusSearchState = NexusSearchState.Searching;
+        NexusMatch match;
+        try
+        {
+            var key = await Task.Run(() => ModSearchKey.FromMod(mod.ModInfo));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            match = await _nexusFinder.FindAsync(key, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            match = NexusMatch.Failed;
+        }
+
+        switch (match.Certainty)
+        {
+            case NexusMatchCertainty.Sure:
+                var url = Helpers.NexusLinks.ModPageUrl(match.Best!.NexusModId);
+                mod.NexusSearchState = NexusSearchState.Found;
+                Helpers.PlatformHelper.Open(url);
+                await SaveNexusLinkAsync(mod, url);
+                break;
+            case NexusMatchCertainty.Uncertain:
+                mod.NexusSearchState = NexusSearchState.Uncertain;
+                var dialog = new DVModManager.Views.NexusCandidatesDialog
+                {
+                    DataContext = new NexusCandidatesViewModel(mod.DisplayName, match.Candidates)
+                };
+                await dialog.ShowDialog(GetMainWindow());
+                break;
+            case NexusMatchCertainty.NotFound:
+                mod.NexusSearchState = NexusSearchState.NotFound;
+                break;
+            default:
+                mod.NexusSearchState = NexusSearchState.Failed;
+                break;
+        }
+    }
+
+    /// <summary>Keeps a found Nexus link in the link store, leaving a stored repository link as it is.</summary>
+    private async Task SaveNexusLinkAsync(ModItemViewModel mod, string url)
+    {
+        try
+        {
+            await _linkStore.LoadAsync(_settings.Settings.StoragePath);
+            _linkStore.Set(mod.Id, url, _linkStore.Get(mod.Id)?.RepositoryUrl);
+            await _linkStore.SaveAsync();
+            mod.ModInfo.NexusUrl = url;
+            mod.NexusUrl = url;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not save the Nexus link of {ModId}", mod.Id);
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanModify))]
     private async Task UninstallSelectedModAsync()
     {
@@ -1398,18 +1476,21 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task SaveCurrentProfileAsync()
     {
         var activeMods = ActiveMods.Select(v => v.ModInfo).ToList();
-        var profile = new ModProfile
+        // Fingerprints read the mod folders, so the entries are built off the UI thread.
+        var entries = await Task.Run(() => activeMods.Select(m => new ProfileModEntry
         {
-            Name = SelectedProfileName,
-            Mods = activeMods.Select(m => new ProfileModEntry
-            {
-                ModId         = m.Id,
-                Version       = m.Version,
-                IsActive      = true,
-                RepositoryUrl = string.IsNullOrEmpty(m.Repository) ? null : m.Repository,
-                HomePageUrl   = string.IsNullOrEmpty(m.HomePage)   ? null : m.HomePage
-            }).ToList()
-        };
+            ModId         = m.Id,
+            // A placeholder falls back to its id as name; that is not worth saving.
+            DisplayName   = string.IsNullOrWhiteSpace(m.DisplayName) || (m.IsPlaceholder && m.DisplayName == m.Id)
+                                ? null : m.DisplayName,
+            Version       = m.Version,
+            IsActive      = true,
+            RepositoryUrl = string.IsNullOrEmpty(m.Repository) ? null : m.Repository,
+            HomePageUrl   = m.NexusUrl ?? (string.IsNullOrEmpty(m.HomePage) ? null : m.HomePage),
+            Author        = string.IsNullOrWhiteSpace(m.Author) ? null : m.Author,
+            Fingerprint   = m.IsPlaceholder ? m.Fingerprint : Helpers.ModFingerprint.Encode(Helpers.ModFingerprint.Compute(m.FolderPath))
+        }).ToList());
+        var profile = new ModProfile { Name = SelectedProfileName, Mods = entries };
 
         await _profileService.SaveProfileAsync(profile, _settings.Settings.ProfilesPath);
         _settings.Settings.ActiveProfileName = SelectedProfileName;
@@ -1460,6 +1541,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (!hasWork)
         {
+            // Mods without any download link never reach the diff, so they still need placeholders.
+            if (await CreatePlaceholdersForMissingAsync(profile) > 0)
+                await RefreshModsAsync();
             StatusMessage = _localization.GetString("status.profile_already_applied");
             return;
         }
@@ -1553,6 +1637,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
             }
         }
+
+        var placeholdersCreated = await CreatePlaceholdersForMissingAsync(profile) > 0;
 
         // ── Handle mods that need re-downloading to the correct version ──────
         if (diff.ToRedownload.Count > 0)
@@ -1691,6 +1777,8 @@ public partial class MainWindowViewModel : ViewModelBase
         // ── No remaining work? ────────────────────────────────────────────────
         if (diff.ToActivate.Count == 0 && diff.ToDeactivate.Count == 0 && diff.ToRollback.Count == 0)
         {
+            if (placeholdersCreated)
+                await RefreshModsAsync();
             _settings.Settings.ActiveProfileName = profileName;
             SelectedProfileName = profileName;
             await _settings.SaveAsync();
@@ -1727,6 +1815,37 @@ public partial class MainWindowViewModel : ViewModelBase
         await _settings.SaveAsync();
         await RefreshModsAsync();
         StatusMessage = _localization.GetString("status.profile_applied", profileName);
+    }
+
+    /// <summary>
+    /// Creates a placeholder in <c>Mods/</c> for every active profile mod that is
+    /// still not installed, so it shows up in the list and can be looked up on Nexus.
+    /// Returns how many placeholders were created.
+    /// </summary>
+    private async Task<int> CreatePlaceholdersForMissingAsync(ModProfile profile)
+    {
+        var gamePath = _settings.Settings.GamePath;
+        if (gamePath == null) return 0;
+
+        // Existing placeholders are in this set too, so they are not recreated.
+        var present = AvailableMods.Concat(ActiveMods)
+            .Select(v => v.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var modsDir = Path.Combine(gamePath, "Mods");
+
+        var created = 0;
+        foreach (var entry in profile.Mods.Where(e => e.IsActive && !present.Contains(e.ModId)))
+        {
+            try
+            {
+                if (await Helpers.ModPlaceholder.CreateAsync(modsDir, entry)) created++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not create placeholder for {ModId}", entry.ModId);
+            }
+        }
+        return created;
     }
 
     // ── Remove (for externally deleted mods) ─────────────────────────────────
@@ -1804,6 +1923,10 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var mod in mods)
             mod.UmmEnabled = !ummStates.TryGetValue(mod.Id, out var enabled) || enabled;
 
+        await _linkStore.LoadAsync(_settings.Settings.StoragePath);
+        foreach (var mod in mods)
+            ApplyStoredLinks(mod);
+
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             // Preserve any pending update state before clearing — RefreshModsAsync
@@ -1843,6 +1966,18 @@ public partial class MainWindowViewModel : ViewModelBase
                 ? _localization.GetString("status.no_mods_found", modsDir)
                 : _localization.GetString("status.mods_found", mods.Count, active, inactive);
         });
+    }
+
+    /// <summary>
+    /// Lays the link store over what Info.json declares. Stored links win, so a mod
+    /// update that rewrites Info.json does not lose them.
+    /// </summary>
+    private void ApplyStoredLinks(ModInfo mod)
+    {
+        var stored = _linkStore.Get(mod.Id);
+        if (stored?.RepositoryUrl != null)
+            mod.Repository = stored.RepositoryUrl;
+        mod.NexusUrl = stored?.NexusUrl ?? (Helpers.NexusLinks.IsModPageUrl(mod.HomePage) ? mod.HomePage : null);
     }
 
     private async Task RefreshProfileListAsync()
@@ -1968,6 +2103,21 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (vm.Applied && vm.AppliedProfileName != null)
             await ApplyProfileAsync(vm.AppliedProfileName);
+    }
+
+    [RelayCommand]
+    private async Task OpenModLinksAsync()
+    {
+        var vm = App.Services.GetRequiredService<ModLinksViewModel>();
+        vm.Load(AvailableMods.Concat(ActiveMods).Select(v => v.ModInfo));
+        var dialog = new DVModManager.Views.ModLinksDialog { DataContext = vm };
+        await dialog.ShowDialog(GetMainWindow());
+
+        if (vm.Saved)
+        {
+            await RefreshModsAsync();
+            StatusMessage = _localization.GetString("status.mod_links_saved");
+        }
     }
 
     // ── Version history for selected mod ─────────────────────────────────────
@@ -2117,14 +2267,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Use last-write-wins to handle any duplicates (e.g. mods with empty Id) (H3):
         // ToDictionary throws on duplicate/empty keys, so build via indexer instead.
+        // Placeholders never satisfy a dependency; the mod they stand for is not installed.
         var activeMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in ActiveMods)
-            if (!string.IsNullOrEmpty(m.Id))
+            if (!string.IsNullOrEmpty(m.Id) && !m.IsPlaceholder)
                 activeMap[m.Id] = m.Version;
 
         var inactiveMap = new Dictionary<string, ModItemViewModel>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in AvailableMods)
-            if (!string.IsNullOrEmpty(m.Id))
+            if (!string.IsNullOrEmpty(m.Id) && !m.IsPlaceholder)
                 inactiveMap[m.Id] = m;
 
         var trulyMissing = new List<string>();

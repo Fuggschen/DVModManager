@@ -419,8 +419,9 @@ public class ModInstallService : IModInstallService
             }
             else
             {
-                // Archive current state into the version cache before removing
-                if (ShouldArchive && Directory.Exists(mod.FolderPath))
+                // Archive current state into the version cache before removing.
+                // A placeholder holds no mod files, so caching it would fake a version.
+                if (ShouldArchive && !mod.IsPlaceholder && Directory.Exists(mod.FolderPath))
                     await _versionCache.ArchiveCurrentVersionAsync(mod, storagePath);
 
                 if (Directory.Exists(mod.FolderPath)) Directory.Delete(mod.FolderPath, true);

@@ -1,0 +1,199 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:DVModManager.ViewModels"
+        xmlns:conv="using:DVModManager.Converters"
+        x:Class="DVModManager.Views.ModLinksDialog"
+        x:DataType="vm:ModLinksViewModel"
+        x:Name="Root"
+        Title="{conv:Localize mod_links.title}"
+        Width="760" Height="600"
+        MinWidth="560" MinHeight="380"
+        WindowStartupLocation="CenterOwner"
+        Background="#1e1e2e">
+
+    <Window.Styles>
+        <Style Selector="TextBox.invalid">
+            <Setter Property="BorderBrush" Value="#f38ba8" />
+        </Style>
+        <!-- Filter tabs: flat, the selected one gets the accent -->
+        <Style Selector="ToggleButton.tab">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#a6adc8" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="10,4" />
+        </Style>
+        <Style Selector="ToggleButton.tab:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="#313244" />
+            <Setter Property="Foreground" Value="#cdd6f4" />
+        </Style>
+        <!-- Text-only buttons for row actions -->
+        <Style Selector="Button.quiet">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#89b4fa" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="6,2" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+
+        <!-- What a Nexus link does and does not do -->
+        <Border Grid.Row="0"
+                Background="#313244"
+                CornerRadius="4"
+                Padding="12,8"
+                Margin="0,0,0,12">
+            <TextBlock Text="{conv:Localize mod_links.notice}"
+                       Foreground="#a6adc8"
+                       FontSize="12"
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <!-- Top: the one main action, its progress, and the filter -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,10">
+            <Button Grid.Column="0"
+                    Content="{conv:Localize mod_links.search_missing}"
+                    Command="{Binding SearchMissingCommand}"
+                    Background="#89b4fa"
+                    Foreground="#1e1e2e"
+                    Padding="12,6" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="12,0">
+                <ProgressBar IsIndeterminate="True"
+                             IsVisible="{Binding IsSearching}"
+                             Width="48" MinWidth="0" Height="4"
+                             Foreground="#89b4fa" Background="#313244"
+                             VerticalAlignment="Center" />
+                <TextBlock Text="{Binding ProgressText}"
+                           Foreground="#a6adc8"
+                           FontSize="12"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                <ToggleButton Classes="tab" Content="{Binding AttentionLabel}" IsChecked="{Binding IsAttentionFilter}" />
+                <ToggleButton Classes="tab" Content="{Binding LinkedLabel}" IsChecked="{Binding IsLinkedFilter}" />
+                <ToggleButton Classes="tab" Content="{Binding AllLabel}" IsChecked="{Binding IsAllFilter}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Mods: name on the left, the Nexus link or its status on the right -->
+        <Border Grid.Row="2" Background="#181825" CornerRadius="4">
+            <Panel>
+                <TextBlock Text="{conv:Localize mod_links.empty}"
+                           IsVisible="{Binding IsEmpty}"
+                           Foreground="#9399b2"
+                           FontSize="13"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Rows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ModLinkRowViewModel">
+                                <Border BorderBrush="#313244"
+                                        BorderThickness="0,0,0,1"
+                                        Padding="12,8">
+                                    <Grid ColumnDefinitions="*,*">
+                                        <StackPanel Grid.Column="0" Spacing="1" VerticalAlignment="Center"
+                                                    ToolTip.Tip="{Binding ModId}">
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       Foreground="#cdd6f4"
+                                                       FontSize="13"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Kind}"
+                                                       Foreground="#9399b2"
+                                                       FontSize="11" />
+                                        </StackPanel>
+
+                                        <!-- Linked: the page as text, Edit on the side -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4"
+                                                    VerticalAlignment="Center"
+                                                    IsVisible="{Binding ShowLink}">
+                                            <Button Classes="quiet"
+                                                    Command="{Binding OpenLinkCommand}"
+                                                    ToolTip.Tip="{Binding NexusUrl}">
+                                                <TextBlock Text="{Binding LinkText, StringFormat='{}{0} ↗'}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </Button>
+                                            <Button Classes="quiet"
+                                                    Content="{conv:Localize mod_links.edit}"
+                                                    Command="{Binding EditCommand}"
+                                                    Foreground="#9399b2" />
+                                        </StackPanel>
+
+                                        <!-- No link: what the search found, and what to do next -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                                    VerticalAlignment="Center"
+                                                    IsVisible="{Binding ShowStatus}">
+                                            <ProgressBar IsIndeterminate="True"
+                                                         IsVisible="{Binding IsSearching}"
+                                                         Width="32" MinWidth="0" Height="4"
+                                                         Foreground="#89b4fa" Background="#313244"
+                                                         VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding StatusText}"
+                                                       Foreground="{Binding StatusBrush}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center" />
+                                            <Button Content="{conv:Localize mod_links.review}"
+                                                    Command="{Binding ReviewCommand}"
+                                                    CommandParameter="{Binding #Root}"
+                                                    IsVisible="{Binding ShowReview}"
+                                                    Background="#f39c12"
+                                                    Foreground="#1e1e2e"
+                                                    FontSize="12"
+                                                    Padding="8,2" />
+                                            <Button Classes="quiet"
+                                                    Content="{conv:Localize mod_links.add_link}"
+                                                    Command="{Binding EditCommand}"
+                                                    IsVisible="{Binding !IsSearching}" />
+                                        </StackPanel>
+
+                                        <!-- Editing: the raw link -->
+                                        <Grid Grid.Column="1" ColumnDefinitions="*,Auto"
+                                              VerticalAlignment="Center"
+                                              IsVisible="{Binding IsEditing}">
+                                            <TextBox Grid.Column="0"
+                                                     Text="{Binding NexusUrl}"
+                                                     Classes.invalid="{Binding !IsNexusValid}"
+                                                     PlaceholderText="https://www.nexusmods.com/derailvalley/mods/…"
+                                                     FontSize="12" />
+                                            <Button Grid.Column="1"
+                                                    Classes="quiet"
+                                                    Content="{conv:Localize mod_links.done}"
+                                                    Command="{Binding DoneEditingCommand}"
+                                                    Margin="4,0,0,0" />
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Panel>
+        </Border>
+
+        <!-- Footer: notices on the left, Save / Cancel on the right like the other dialogs -->
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" Margin="0,12,0,0">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding NoticeText}"
+                       Foreground="#f38ba8"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,0" />
+            <Button Grid.Column="1"
+                    Content="{conv:Localize mod_links.save}"
+                    Command="{Binding SaveCommand}"
+                    CommandParameter="{Binding #Root}"
+                    Background="#a6e3a1"
+                    Foreground="#1e1e2e"
+                    Padding="20,8"
+                    Margin="0,0,8,0" />
+            <Button Grid.Column="2"
+                    Content="{conv:Localize mod_links.cancel}"
+                    Command="{Binding CancelCommand}"
+                    CommandParameter="{Binding #Root}"
+                    Background="#313244"
+                    Foreground="#cdd6f4"
+                    Padding="20,8" />
+        </Grid>
+    </Grid>
+</Window>

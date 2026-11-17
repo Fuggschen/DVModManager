@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using DVModManager.Helpers;
 using DVModManager.Models;
 using DVModManager.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -73,6 +74,99 @@ public class ModDiscoveryServiceTests
         finally
         {
             if (Directory.Exists(tempModDir)) Directory.Delete(tempModDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ScanAllModsAsync_ReadsPlaceholderFromProfileEntry()
+    {
+        var tempGamePath = Path.Combine(Path.GetTempPath(), "Game_" + Guid.NewGuid());
+        var modsDir = Path.Combine(tempGamePath, "Mods");
+        Directory.CreateDirectory(modsDir);
+
+        try
+        {
+            var created = await ModPlaceholder.CreateAsync(modsDir, new ProfileModEntry
+            {
+                ModId = "C62AK", DisplayName = "CR C62AK", Author = "Someone", Fingerprint = "djEKMTAJYQ",
+                Version = "1.0.2", IsActive = true,
+                HomePageUrl = "https://www.nexusmods.com/derailvalley/mods/1638"
+            });
+            Assert.True(created);
+
+            var mods = await _service.ScanAllModsAsync(tempGamePath);
+
+            var mod = Assert.Single(mods);
+            Assert.Equal("C62AK", mod.Id);
+            Assert.Equal("1.0.2", mod.Version);
+            Assert.True(mod.IsPlaceholder);
+            Assert.True(mod.IsActive);
+            Assert.Equal(ModState.Placeholder, mod.State);
+            Assert.Equal("https://www.nexusmods.com/derailvalley/mods/1638", mod.HomePage);
+            Assert.Equal("CR C62AK", mod.DisplayName);
+            Assert.Equal("Someone", mod.Author);
+            Assert.Equal("djEKMTAJYQ", mod.Fingerprint);
+        }
+        finally
+        {
+            if (Directory.Exists(tempGamePath)) Directory.Delete(tempGamePath, true);
+        }
+    }
+
+    [Fact]
+    public async Task ScanAllModsAsync_RemovesPlaceholderOnceRealModIsInstalled()
+    {
+        var tempGamePath = Path.Combine(Path.GetTempPath(), "Game_" + Guid.NewGuid());
+        var modsDir = Path.Combine(tempGamePath, "Mods");
+        var inactiveDir = Path.Combine(tempGamePath, "Mods.inactive");
+        Directory.CreateDirectory(modsDir);
+
+        // Real mod installed under a different folder name than the placeholder.
+        Directory.CreateDirectory(Path.Combine(inactiveDir, "OtherFolder"));
+        File.WriteAllText(Path.Combine(inactiveDir, "OtherFolder", "Info.json"),
+            """{"Id": "ModA", "Version": "1.0.0"}""");
+
+        // Real mod installed over its placeholder folder; the installer carries the file over.
+        Directory.CreateDirectory(Path.Combine(modsDir, "ModB"));
+        File.WriteAllText(Path.Combine(modsDir, "ModB", "Info.json"), """{"Id": "ModB", "Version": "1.0.0"}""");
+        File.WriteAllText(Path.Combine(modsDir, "ModB", ModPlaceholder.FileName), """{"ModId": "ModB"}""");
+
+        try
+        {
+            await ModPlaceholder.CreateAsync(modsDir, new ProfileModEntry { ModId = "ModA", IsActive = true });
+
+            var mods = await _service.ScanAllModsAsync(tempGamePath);
+
+            Assert.Equal(2, mods.Count);
+            Assert.All(mods, m => Assert.False(m.IsPlaceholder));
+            Assert.False(Directory.Exists(Path.Combine(modsDir, "ModA")));
+            Assert.False(File.Exists(Path.Combine(modsDir, "ModB", ModPlaceholder.FileName)));
+            Assert.True(File.Exists(Path.Combine(modsDir, "ModB", "Info.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(tempGamePath)) Directory.Delete(tempGamePath, true);
+        }
+    }
+
+    [Fact]
+    public async Task CreatePlaceholder_NeverTouchesExistingFolder()
+    {
+        var modsDir = Path.Combine(Path.GetTempPath(), "Mods_" + Guid.NewGuid());
+        Directory.CreateDirectory(Path.Combine(modsDir, "ModA"));
+
+        try
+        {
+            var created = await ModPlaceholder.CreateAsync(modsDir, new ProfileModEntry { ModId = "ModA" });
+            var unsafeCreated = await ModPlaceholder.CreateAsync(modsDir, new ProfileModEntry { ModId = "..\\evil" });
+
+            Assert.False(created);
+            Assert.False(unsafeCreated);
+            Assert.False(File.Exists(Path.Combine(modsDir, "ModA", ModPlaceholder.FileName)));
+        }
+        finally
+        {
+            if (Directory.Exists(modsDir)) Directory.Delete(modsDir, true);
         }
     }
 

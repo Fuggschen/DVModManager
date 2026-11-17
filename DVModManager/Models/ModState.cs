@@ -7,5 +7,6 @@ public enum ModState
     UpdateAvailable,
     MissingDependency,
     NoMetadata,
-    Missing   // installed in a group but no longer found on disk
+    Missing,      // installed in a group but no longer found on disk
+    Placeholder   // folder holds only a placeholder.json left by a profile apply
 }

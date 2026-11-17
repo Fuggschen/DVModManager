@@ -32,6 +32,7 @@ public partial class ModItemViewModel : ViewModelBase, IDisposable
                     OnPropertyChanged(nameof(StatusLabel));
                     OnPropertyChanged(nameof(UmmStatusLabel));
                     OnPropertyChanged(nameof(UmmToggleLabel));
+                    OnPropertyChanged(nameof(NexusSearchLabel));
                 };
                 _localization.LanguageChanged += _languageChangedHandler;
             }
@@ -70,6 +71,9 @@ public partial class ModItemViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool _hasMissingDependency;
     [ObservableProperty] private bool _hasMetadata;
     [ObservableProperty] private string? _homePage;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasNexusUrl))]
+    private string? _nexusUrl;
     [ObservableProperty] private string? _repository;
     [ObservableProperty] private string? _description;
     [ObservableProperty] private string[] _requirements = [];
@@ -105,6 +109,23 @@ public partial class ModItemViewModel : ViewModelBase, IDisposable
 
     public ModInfo ModInfo => _modInfo;
 
+    /// <summary>True when the folder only holds a placeholder.json for a profile mod.</summary>
+    public bool IsPlaceholder => _modInfo.IsPlaceholder;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsNexusSearching))]
+    [NotifyPropertyChangedFor(nameof(NexusSearchLabel))]
+    [NotifyPropertyChangedFor(nameof(NexusSearchBrush))]
+    private NexusSearchState _nexusSearchState;
+
+    public bool IsNexusSearching => NexusSearchState == NexusSearchState.Searching;
+
+    public bool HasNexusUrl => !string.IsNullOrEmpty(NexusUrl);
+
+    public string NexusSearchLabel => NexusSearchPresentation.Label(NexusSearchState, _localization);
+
+    public IBrush NexusSearchBrush => NexusSearchPresentation.Brush(NexusSearchState);
+
     private string LocalizeStatus(string key, string fallback, params object?[] args)
     {
         if (_localization == null)
@@ -123,7 +144,8 @@ public partial class ModItemViewModel : ViewModelBase, IDisposable
         ModState.MissingDependency => LocalizeStatus("modstate.missing_dependency", "Missing dependency"),
         ModState.NoMetadata        => LocalizeStatus("modstate.no_metadata", "No metadata"),
         ModState.Missing           => LocalizeStatus("modstate.missing", "Missing — not found on disk"),
-        ModState.Active            => LocalizeStatus("modstate.active", "Active"),
+        ModState.Placeholder       => LocalizeStatus("modstate.placeholder", "Not installed (placeholder from profile)"),
+        ModState.Active           => LocalizeStatus("modstate.active", "Active"),
         _                          => LocalizeStatus("modstate.inactive", "Inactive")
     };
 
@@ -139,7 +161,7 @@ public partial class ModItemViewModel : ViewModelBase, IDisposable
     {
         ModState.Active          => new SolidColorBrush(Color.Parse("#2ecc71")),
         ModState.UpdateAvailable => new SolidColorBrush(Color.Parse("#f39c12")),
-        ModState.MissingDependency or ModState.NoMetadata or ModState.Missing
+        ModState.MissingDependency or ModState.NoMetadata or ModState.Missing or ModState.Placeholder
                                  => new SolidColorBrush(Color.Parse("#e74c3c")),
         _                        => new SolidColorBrush(Color.Parse("#7f8c8d"))
     };
@@ -164,6 +186,7 @@ public partial class ModItemViewModel : ViewModelBase, IDisposable
         State = _modInfo.State;
         HasMetadata = _modInfo.HasMetadata;
         HomePage = _modInfo.HomePage;
+        NexusUrl = _modInfo.NexusUrl;
         Repository = _modInfo.Repository;
         Description = _modInfo.Description;
         Requirements = _modInfo.Requirements;

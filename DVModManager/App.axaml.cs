@@ -129,6 +129,8 @@ public class App : Application
         // Update services
         services.AddSingleton<IGitHubModsService, GitHubModsService>();
         services.AddSingleton<INexusModsService, NexusModsService>();
+        services.AddSingleton<INexusModFinder, NexusModFinder>();
+        services.AddSingleton<IModLinkStore, ModLinkStore>();
         services.AddSingleton<IUpdateService, UpdateService>();
         services.AddSingleton<IManagerUpdateService, ManagerUpdateService>();
 
@@ -144,5 +146,6 @@ public class App : Application
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<ProfileViewModel>();
+        services.AddTransient<ModLinksViewModel>();
     }
 }

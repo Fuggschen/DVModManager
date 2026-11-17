@@ -16,7 +16,8 @@ public class ModStateToBrushConverter : IValueConverter
             {
                 ModState.Active => new SolidColorBrush(Color.Parse("#2ecc71")),
                 ModState.UpdateAvailable => new SolidColorBrush(Color.Parse("#f39c12")),
-                ModState.MissingDependency or ModState.NoMetadata => new SolidColorBrush(Color.Parse("#e74c3c")),
+                ModState.MissingDependency or ModState.NoMetadata or ModState.Placeholder
+                    => new SolidColorBrush(Color.Parse("#e74c3c")),
                 _ => new SolidColorBrush(Color.Parse("#7f8c8d"))
             }
             : Brushes.Gray;

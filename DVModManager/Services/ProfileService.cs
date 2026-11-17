@@ -106,6 +106,10 @@ public class ProfileService : IProfileService
                                  : null;
                 if (modFolder == null) continue;
 
+                // A placeholder has no mod files; profile.json already carries its id and links.
+                if (Helpers.InfoJsonLocator.Locate(modFolder) == null
+                    && Helpers.ModPlaceholder.Locate(modFolder) != null) continue;
+
                 foreach (var file in Directory.EnumerateFiles(modFolder, "*", SearchOption.AllDirectories))
                 {
                     var relative = Path.GetRelativePath(modFolder, file)
@@ -135,6 +139,8 @@ public class ProfileService : IProfileService
     {
         // Use last-write-wins to tolerate duplicate mod IDs (e.g. same mod in both
         // Mods/ and Mods.inactive/ simultaneously after a failed move).
+        // Placeholders count as not installed, so their downloads are retried.
+        currentMods = currentMods.Where(m => !m.IsPlaceholder).ToList();
         var currentById = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in currentMods)
             if (!string.IsNullOrEmpty(m.Id))
@@ -189,7 +195,7 @@ public class ProfileService : IProfileService
         // Last-write-wins lookup so duplicate IDs don't throw (same rule as ComputeDiff).
         var currentById = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in currentMods)
-            if (!string.IsNullOrEmpty(m.Id))
+            if (!string.IsNullOrEmpty(m.Id) && !m.IsPlaceholder)
                 currentById[m.Id] = m;
 
         var items = new List<ProfileImportPreviewItem>();

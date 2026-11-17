@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.RegularExpressions;
+using DVModManager.Helpers;
 using DVModManager.Models;
 using Microsoft.Extensions.Logging;
 
@@ -25,7 +25,7 @@ public class NexusModsService : INexusModsService
 
     public async Task<ModUpdateInfo?> CheckUpdateAsync(ModInfo mod, CancellationToken ct = default)
     {
-        var nexusId = ExtractNexusModId(mod.HomePage);
+        var nexusId = NexusLinks.TryParseModId(mod.NexusUrl ?? mod.HomePage);
         if (nexusId == null) return null;
 
         try
@@ -82,7 +82,7 @@ public class NexusModsService : INexusModsService
                 CurrentVersion = mod.Version,
                 LatestVersion = latestVersion,
                 Source = "nexus",
-                ChangelogUrl = $"https://www.nexusmods.com/derailvalley/mods/{nexusId}",
+                ChangelogUrl = NexusLinks.ModPageUrl(nexusId.Value),
                 ReleasedAt = releasedAt
             };
         }
@@ -120,13 +120,6 @@ public class NexusModsService : INexusModsService
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static int? ExtractNexusModId(string? homePage)
-    {
-        if (string.IsNullOrEmpty(homePage)) return null;
-        var match = Regex.Match(homePage, @"nexusmods\.com/[^/]+/mods/(\d+)", RegexOptions.IgnoreCase);
-        return match.Success && int.TryParse(match.Groups[1].Value, out var id) ? id : null;
-    }
 
     private static bool IsNewerVersion(string current, string latest)
     {

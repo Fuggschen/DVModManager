@@ -283,7 +283,7 @@ public class DialogService : IDialogService
         var tcs = new TaskCompletionSource<ModProfile?>();
         var checkboxes = new List<(ProfileImportPreviewItem Item, CheckBox Box)>();
 
-        var content = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 12 };
+        var content = new StackPanel { Spacing = 12 };
 
         if (showSecurityWarning)
         {
@@ -315,10 +315,14 @@ public class DialogService : IDialogService
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = Brushes.OrangeRed
             });
-            warn.Children.Add(new TextBlock
+            warn.Children.Add(new ScrollViewer
             {
-                Text = string.Join("\n", noLink),
-                TextWrapping = TextWrapping.Wrap
+                MaxHeight = 120,
+                Content = new TextBlock
+                {
+                    Text = string.Join("\n", noLink),
+                    TextWrapping = TextWrapping.Wrap
+                }
             });
             content.Children.Add(warn);
         }
@@ -383,8 +387,6 @@ public class DialogService : IDialogService
             rows.Children.Add(row);
         }
 
-        content.Children.Add(new ScrollViewer { MaxHeight = 300, Content = rows });
-
         var importBtn = new Button { Content = _loc.GetString("import.button.confirm") };
         var cancelBtn = new Button { Content = _loc.GetString("settings.button.cancel") };
         importBtn.Click += (_, _) =>
@@ -395,12 +397,27 @@ public class DialogService : IDialogService
         };
         cancelBtn.Click += (_, _) => tcs.TrySetResult(null);
 
-        content.Children.Add(new StackPanel
+        var buttons = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             Spacing = 12,
             Children = { importBtn, cancelBtn }
+        };
+
+        // A StackPanel would hand the mod list unlimited height and push the buttons
+        // past the window's MaxHeight. Docking keeps the buttons visible and lets the
+        // list take whatever height is left.
+        var layout = new DockPanel { Margin = new Avalonia.Thickness(20) };
+        DockPanel.SetDock(content, Dock.Top);
+        DockPanel.SetDock(buttons, Dock.Bottom);
+        layout.Children.Add(content);
+        layout.Children.Add(buttons);
+        layout.Children.Add(new ScrollViewer
+        {
+            MaxHeight = 300,
+            Margin = new Avalonia.Thickness(0, 12),
+            Content = rows
         });
 
         var dialog = new Window
@@ -411,7 +428,7 @@ public class DialogService : IDialogService
             SizeToContent = SizeToContent.Height,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = content
+            Content = layout
         };
 
         dialog.Closing += (_, _) => tcs.TrySetResult(null);

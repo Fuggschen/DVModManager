@@ -80,6 +80,30 @@ public class ProfileServiceTests
     }
 
     [Fact]
+    public void ComputeDiff_TreatsPlaceholderAsNotInstalled()
+    {
+        var profile = new ModProfile
+        {
+            Mods =
+            [
+                new ProfileModEntry { ModId = "ModWithLink", IsActive = true, Version = "1.0.0", HomePageUrl = "https://nexusmods.com/x" }
+            ]
+        };
+        var currentMods = new List<ModInfo>
+        {
+            new() { Id = "ModWithLink", IsActive = true, Version = "1.0.0", IsPlaceholder = true },
+            new() { Id = "LeftoverPlaceholder", IsActive = true, Version = "1.0.0", IsPlaceholder = true }
+        };
+
+        var diff = _service.ComputeDiff(profile, currentMods);
+
+        Assert.Equal("ModWithLink", Assert.Single(diff.ToDownload).ModId);
+        Assert.Empty(diff.ToActivate);
+        Assert.Empty(diff.ToDeactivate);
+        Assert.Empty(diff.ToRollback);
+    }
+
+    [Fact]
     public void ComputeDiff_ComputesActivationsDeactivationsRollbacksAndDownloads()
     {
         var profile = new ModProfile

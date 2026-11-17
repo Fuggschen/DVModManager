@@ -1,0 +1,86 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:DVModManager.ViewModels"
+        xmlns:conv="using:DVModManager.Converters"
+        x:Class="DVModManager.Views.NexusCandidatesDialog"
+        x:DataType="vm:NexusCandidatesViewModel"
+        x:Name="Root"
+        Title="{conv:Localize nexus_candidates.title}"
+        Width="520" SizeToContent="Height" MaxHeight="520"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="#1e1e2e">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+
+        <TextBlock Grid.Row="0"
+                   Text="{Binding Message}"
+                   Foreground="#f39c12"
+                   FontSize="13"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,12" />
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Candidates}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:NexusCandidateRow">
+                        <Border Background="#181825"
+                                BorderBrush="#313244"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="10,6"
+                                Margin="0,0,0,6">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="{Binding Name}"
+                                               Foreground="#cdd6f4"
+                                               FontSize="13"
+                                               FontWeight="Medium"
+                                               TextWrapping="Wrap" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{conv:Localize nexus_candidates.score}"
+                                                   Foreground="#6c7086"
+                                                   FontSize="11" />
+                                        <TextBlock Text="{Binding Score}"
+                                                   Foreground="#a6adc8"
+                                                   FontSize="11" />
+                                        <TextBlock Text="•" Foreground="#45475a" FontSize="11" />
+                                        <TextBlock Text="{Binding Signals}"
+                                                   Foreground="#6c7086"
+                                                   FontSize="11" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                            VerticalAlignment="Center">
+                                    <Button Content="{conv:Localize button.open}"
+                                            Command="{Binding #Root.((vm:NexusCandidatesViewModel)DataContext).OpenCommand}"
+                                            CommandParameter="{Binding}"
+                                            Background="#45475a"
+                                            Foreground="#cdd6f4"
+                                            Padding="10,4" />
+                                    <Button Content="{conv:Localize nexus_candidates.use}"
+                                            Command="{Binding #Root.((vm:NexusCandidatesViewModel)DataContext).UseCommand}"
+                                            CommandParameter="{Binding}"
+                                            IsVisible="{Binding #Root.((vm:NexusCandidatesViewModel)DataContext).CanUse}"
+                                            Background="#89b4fa"
+                                            Foreground="#1e1e2e"
+                                            Padding="10,4" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <Button Grid.Row="2"
+                Content="{conv:Localize button.close}"
+                Command="{Binding CloseCommand}"
+                CommandParameter="{Binding #Root}"
+                HorizontalAlignment="Right"
+                Margin="0,12,0,0"
+                Background="#313244"
+                Foreground="#cdd6f4"
+                Padding="20,8" />
+    </Grid>
+</Window>

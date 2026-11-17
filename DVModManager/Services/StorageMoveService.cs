@@ -9,7 +9,7 @@ public class StorageMoveService : IStorageMoveService
     /// The folders that live under <see cref="PublicSettings.StoragePath"/>. Settings and
     /// logs always stay in <see cref="ManagerStorage.ConfigDirectory"/> and are not moved.
     /// </summary>
-    public static readonly string[] MovedFolders = ["versions", "downloads", ManagerStorage.ProfilesDirectoryName];
+    public static readonly string[] MovedFolders = ["versions", "downloads", ManagerStorage.ProfilesDirectoryName, ModLinkStore.DirectoryName];
 
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;

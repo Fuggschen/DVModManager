@@ -31,6 +31,12 @@ public class ModInfo
     [JsonIgnore] public bool HasMetadata { get; set; } = true;
     /// <summary>In-game enabled flag from UMM Params.xml (absent entry = enabled).</summary>
     [JsonIgnore] public bool UmmEnabled { get; set; } = true;
+    /// <summary>True when the folder is a placeholder for a profile mod that is not installed.</summary>
+    [JsonIgnore] public bool IsPlaceholder { get; set; }
+    /// <summary>Nexus page of the mod: the link store entry, else a Nexus <see cref="HomePage"/>.</summary>
+    [JsonIgnore] public string? NexusUrl { get; set; }
+    /// <summary>Encoded file fingerprint a placeholder carries over from its profile entry.</summary>
+    [JsonIgnore] public string? Fingerprint { get; set; }
 
     /// <summary>Effective display name: falls back to Id if DisplayName is blank.</summary>
     [JsonIgnore] public string EffectiveDisplayName =>

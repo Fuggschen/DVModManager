@@ -19,7 +19,7 @@ public class UpdateService : IUpdateService
     public async Task<IReadOnlyList<ModUpdateInfo>> CheckAllUpdatesAsync(
         IReadOnlyList<ModInfo> mods, CancellationToken ct = default)
     {
-        var tasks = mods.Select(m => CheckUpdateAsync(m, ct));
+        var tasks = mods.Where(m => !m.IsPlaceholder).Select(m => CheckUpdateAsync(m, ct));
         var results = await Task.WhenAll(tasks);
         return results.Where(r => r != null).Select(r => r!).ToList();
     }

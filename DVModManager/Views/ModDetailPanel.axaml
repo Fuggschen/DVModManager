@@ -78,6 +78,39 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ── Nexus: open the known page or search for it ── -->
+                <Border Padding="16,10"
+                        BorderBrush="#313244"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="{conv:Localize button.open_on_nexus}"
+                                Command="{Binding OpenOnNexusCommand}"
+                                IsVisible="{Binding SelectedMod.HasNexusUrl}"
+                                Background="#45475a"
+                                Foreground="#cdd6f4"
+                                Padding="10,4" />
+                        <Button Content="{conv:Localize button.search_on_nexus}"
+                                Command="{Binding SearchOnNexusCommand}"
+                                IsVisible="{Binding !SelectedMod.HasNexusUrl}"
+                                ToolTip.Tip="{conv:Localize tooltip.search_on_nexus}"
+                                Background="#45475a"
+                                Foreground="#cdd6f4"
+                                Padding="10,4" />
+                        <ProgressBar IsIndeterminate="True"
+                                     IsVisible="{Binding SelectedMod.IsNexusSearching}"
+                                     Width="48"
+                                     MinWidth="0"
+                                     Height="4"
+                                     Foreground="#89b4fa"
+                                     Background="#313244"
+                                     VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding SelectedMod.NexusSearchLabel}"
+                                   Foreground="{Binding SelectedMod.NexusSearchBrush}"
+                                   FontSize="12"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
                 <!-- ── Description ────────────────────────────────── -->
                 <Border Padding="16,10"
                         BorderBrush="#313244"
@@ -92,19 +125,9 @@
                 <!-- ── Links ──────────────────────────────────────── -->
                 <Border Padding="16,8"
                         BorderBrush="#313244"
-                        BorderThickness="0,0,0,1">
+                        BorderThickness="0,0,0,1"
+                        IsVisible="{Binding SelectedMod.Repository, Converter={StaticResource NullToBool}}">
                     <StackPanel Spacing="4">
-                        <Button Content="{conv:Localize link.homepage}"
-                                Classes="link"
-                                HorizontalAlignment="Left"
-                                IsVisible="{Binding SelectedMod.HomePage, Converter={StaticResource NullToBool}}"
-                                Tag="{Binding SelectedMod.HomePage}"
-                                Click="OnLinkClick"
-                                Background="Transparent"
-                                Foreground="#89b4fa"
-                                Padding="0"
-                                BorderThickness="0" />
-
                         <Button Content="{conv:Localize link.repository}"
                                 Classes="link"
                                 HorizontalAlignment="Left"
